@@ -1,0 +1,241 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Omnisound.Views.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Omnisound.ViewModels"
+    xmlns:views="using:Omnisound.Views"
+    Title="omnisound. Settings">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Custom title bar (content extends into it) -->
+        <Grid x:Name="TitleBar" Height="40" Padding="16,0,0,0">
+            <TextBlock VerticalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}" Text="omnisound. Settings" />
+        </Grid>
+
+        <NavigationView
+            x:Name="Nav"
+            Grid.Row="1"
+            IsBackButtonVisible="Collapsed"
+            IsPaneOpen="False"
+            IsPaneToggleButtonVisible="False"
+            IsSettingsVisible="False"
+            CompactPaneLength="64"
+            OpenPaneLength="216"
+            PaneDisplayMode="Left"
+            ItemInvoked="OnNavItemInvoked"
+            SelectionChanged="OnNavSelectionChanged">
+            <!-- The tab pane is a floating rounded card (drawn in code-behind, see FloatPane); the content
+                 sits directly on the Mica base with no layer or border of its own. -->
+            <NavigationView.Resources>
+                <SolidColorBrush x:Key="NavigationViewDefaultPaneBackground" Color="Transparent" />
+                <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="Transparent" />
+                <!-- Items inset to sit inside the floating pane card (8 px inset + 4 px gap). -->
+                <Thickness x:Key="NavigationViewItemButtonMargin">12,2</Thickness>
+                <!-- That margin also pushes the icon column; pull icons back so they centre in their highlight. -->
+                <Thickness x:Key="NavigationViewItemOnLeftIconBoxMargin">-16,0,0,0</Thickness>
+                <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
+                <SolidColorBrush x:Key="NavigationViewContentGridBorderBrush" Color="Transparent" />
+                <Thickness x:Key="NavigationViewContentGridBorderThickness">0</Thickness>
+                <CornerRadius x:Key="NavigationViewContentGridCornerRadius">0</CornerRadius>
+            </NavigationView.Resources>
+            <NavigationView.MenuItems>
+                <!-- Hamburger as a non-selecting item: same highlight and icon column as the tabs. -->
+                <NavigationViewItem x:Name="MenuToggleItem" AutomationProperties.Name="Toggle navigation" SelectsOnInvoked="False">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE700;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="HotkeysItem" Content="Hotkeys" Tag="hotkeys">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE765;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="General" Tag="general">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <Grid>
+                <!-- Hotkeys page: the list scrolls itself so drag-reordering can auto-scroll. -->
+                <ListView
+                    x:Name="HotkeysPage"
+                    VerticalAlignment="Top"
+                    Padding="36,8,36,36"
+                    AllowDrop="True"
+                    CanDragItems="True"
+                    CanReorderItems="True"
+                    DragItemsCompleted="OnHotkeysReordered"
+                    IsItemClickEnabled="False"
+                    ItemsSource="{x:Bind Hotkeys.Items}"
+                    SelectionMode="None">
+                    <ListView.Header>
+                        <StackPanel>
+                            <TextBlock Margin="0,0,0,8" Style="{StaticResource TitleTextBlockStyle}" Text="Hotkeys" />
+                            <TextBlock
+                                Margin="0,0,0,16"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Bind a key to a volume or media action. One key can carry several bindings: press (repeats while held), double press and triple press. Drag cards to reorder."
+                                TextWrapping="Wrap" />
+
+                            <!-- Same size as a card, dashed: the new hotkey unfolds right below it. -->
+                            <Button
+                                x:Name="AddButton"
+                                Height="68"
+                                Margin="0,0,0,4"
+                                Padding="0"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch"
+                                AutomationProperties.Name="Add hotkey"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Click="OnAddClick"
+                                CornerRadius="{ThemeResource OverlayCornerRadius}">
+                                <Grid>
+                                    <Rectangle
+                                        RadiusX="8"
+                                        RadiusY="8"
+                                        Stroke="{ThemeResource OmnisoundDashStroke}"
+                                        StrokeDashArray="4,3"
+                                        StrokeThickness="1" />
+                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Orientation="Horizontal" Spacing="8">
+                                        <FontIcon FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Glyph="&#xE710;" />
+                                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Add hotkey" />
+                                    </StackPanel>
+                                </Grid>
+                            </Button>
+                        </StackPanel>
+                    </ListView.Header>
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0,0,0,4" />
+                            <Setter Property="MinHeight" Value="0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                            <!-- Bare container: the card draws its own surface and hover. Only the drag states
+                                 that matter are kept (hide the dragged card's slot, open a gap at the drop
+                                 point); the stock presenter also shrinks every other card while dragging. -->
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListViewItem">
+                                        <Grid x:Name="Root" Background="Transparent">
+                                            <VisualStateManager.VisualStateGroups>
+                                                <VisualStateGroup x:Name="DragStates">
+                                                    <VisualState x:Name="NotDragging" />
+                                                    <VisualState x:Name="Dragging" />
+                                                    <VisualState x:Name="DraggingTarget" />
+                                                    <VisualState x:Name="MultipleDraggingPrimary" />
+                                                    <VisualState x:Name="MultipleDraggingSecondary" />
+                                                    <VisualState x:Name="DraggedPlaceholder">
+                                                        <VisualState.Setters>
+                                                            <Setter Target="Root.Opacity" Value="0" />
+                                                        </VisualState.Setters>
+                                                    </VisualState>
+                                                    <VisualState x:Name="Reordering" />
+                                                    <VisualState x:Name="ReorderingTarget" />
+                                                    <VisualState x:Name="MultipleReorderingPrimary" />
+                                                    <VisualState x:Name="ReorderedPlaceholder">
+                                                        <VisualState.Setters>
+                                                            <Setter Target="Root.Opacity" Value="0" />
+                                                        </VisualState.Setters>
+                                                    </VisualState>
+                                                    <VisualState x:Name="DragOver" />
+                                                </VisualStateGroup>
+                                                <VisualStateGroup x:Name="ReorderHintStates">
+                                                    <VisualStateGroup.Transitions>
+                                                        <VisualTransition GeneratedDuration="0:0:0.2" To="NoReorderHint" />
+                                                    </VisualStateGroup.Transitions>
+                                                    <VisualState x:Name="NoReorderHint" />
+                                                    <VisualState x:Name="BottomReorderHint">
+                                                        <Storyboard>
+                                                            <DragOverThemeAnimation Direction="Bottom" TargetName="Root" ToOffset="{ThemeResource ListViewItemReorderHintThemeOffset}" />
+                                                        </Storyboard>
+                                                    </VisualState>
+                                                    <VisualState x:Name="TopReorderHint">
+                                                        <Storyboard>
+                                                            <DragOverThemeAnimation Direction="Top" TargetName="Root" ToOffset="{ThemeResource ListViewItemReorderHintThemeOffset}" />
+                                                        </Storyboard>
+                                                    </VisualState>
+                                                    <VisualState x:Name="RightReorderHint" />
+                                                    <VisualState x:Name="LeftReorderHint" />
+                                                </VisualStateGroup>
+                                            </VisualStateManager.VisualStateGroups>
+                                            <ContentPresenter
+                                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                Content="{TemplateBinding Content}"
+                                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                ContentTransitions="{TemplateBinding ContentTransitions}" />
+                                        </Grid>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="vm:HotkeyItemViewModel">
+                            <views:HotkeyCard Item="{x:Bind}" />
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <!-- General page -->
+                <ScrollViewer x:Name="GeneralPage" Visibility="Collapsed">
+                <Grid MaxWidth="900" Padding="36,8,36,36" HorizontalAlignment="Stretch">
+                    <StackPanel Spacing="4">
+                        <TextBlock Margin="0,0,0,16" Style="{StaticResource TitleTextBlockStyle}" Text="General" />
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Start with Windows" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="Starts quietly in the notification area when you sign in." />
+                                </StackPanel>
+                                <ToggleSwitch
+                                    x:Name="AutoStartSwitch"
+                                    MinWidth="0"
+                                    HorizontalAlignment="Right"
+                                    AutomationProperties.Name="Start with Windows"
+                                    Toggled="OnAutoStartToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Windows sound settings" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="Devices, formats and the system volume mixer." />
+                                </StackPanel>
+                                <Button HorizontalAlignment="Right" Click="OnWindowsSoundClick" Content="Open" />
+                            </Grid>
+                        </Border>
+
+                        <TextBlock
+                            x:Name="SettingsPathText"
+                            Margin="2,12,0,0"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            IsTextSelectionEnabled="True"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+                </ScrollViewer>
+            </Grid>
+        </NavigationView>
+    </Grid>
+</Window>

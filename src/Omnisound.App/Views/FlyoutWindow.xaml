@@ -1,0 +1,200 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Omnisound.Views.FlyoutWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Omnisound.Controls"
+    xmlns:vm="using:Omnisound.ViewModels"
+    Title="omnisound.">
+
+    <!--
+        Layout mirrors the Windows 11 quick-settings flyout:
+        acrylic base → OUTPUT + device picker + master slider, divider, APPS card with per-app rows, footer.
+        Every slider row shares the same four columns: level meter | icon button (mute) | slider | percent.
+    -->
+    <Grid x:Name="RootGrid" KeyDown="OnRootKeyDown">
+        <Grid x:Name="Card" VerticalAlignment="Top">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Master volume, on the base layer -->
+            <StackPanel Padding="19,10,21,8">
+                <!-- "Output" label + current device, which opens the device picker -->
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center" Style="{StaticResource SectionLabelStyle}" Text="OUTPUT" />
+                    <Button
+                        Grid.Column="1"
+                        Margin="0,0,-6,0"
+                        HorizontalAlignment="Right"
+                        Style="{StaticResource DeviceButtonStyle}"
+                        AutomationProperties.Name="Output device"
+                        ToolTipService.ToolTip="Choose output device">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock
+                                MaxWidth="230"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Text="{x:Bind ViewModel.Master.DeviceName, Mode=OneWay, FallbackValue='No output device'}"
+                                TextTrimming="CharacterEllipsis" />
+                            <FontIcon VerticalAlignment="Center" FontSize="10" Glyph="&#xE70D;" />
+                        </StackPanel>
+                        <Button.Flyout>
+                            <!-- In-window popup: a windowed one takes activation and the flyout would close itself. -->
+                            <MenuFlyout x:Name="OutputMenu" Opening="OnOutputMenuOpening" Placement="BottomEdgeAlignedRight" ShouldConstrainToRootBounds="True">
+                                <!-- In-app acrylic has nothing to blur over our own backdrop and reads as see-through. -->
+                                <MenuFlyout.MenuFlyoutPresenterStyle>
+                                    <Style TargetType="MenuFlyoutPresenter" BasedOn="{StaticResource DefaultMenuFlyoutPresenterStyle}">
+                                        <Setter Property="Background" Value="{ThemeResource SolidBackgroundFillColorTertiaryBrush}" />
+                                    </Style>
+                                </MenuFlyout.MenuFlyoutPresenterStyle>
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                </Grid>
+                <Grid ColumnSpacing="6" Visibility="{x:Bind ViewModel.MasterVisibility, Mode=OneWay}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="38" />
+                    </Grid.ColumnDefinitions>
+                    <controls:LevelMeter Margin="0,0,-2,0" Style="{StaticResource LevelMeterStyle}" Level="{x:Bind ViewModel.Master.Level, Mode=OneWay, FallbackValue=0}" />
+                    <Button
+                        Grid.Column="1"
+                        Command="{x:Bind ViewModel.Master.ToggleMuteCommand, Mode=OneWay}"
+                        Style="{StaticResource IconButtonStyle}"
+                        AutomationProperties.Name="Mute output"
+                        ToolTipService.ToolTip="Mute">
+                        <FontIcon FontSize="16" Glyph="{x:Bind ViewModel.Master.Glyph, Mode=OneWay, FallbackValue=''}" />
+                    </Button>
+                    <Slider
+                        Grid.Column="2"
+                        VerticalAlignment="Center"
+                        IsThumbToolTipEnabled="False"
+                        Maximum="100"
+                        Minimum="0"
+                        StepFrequency="1"
+                        Value="{x:Bind ViewModel.Master.Volume, Mode=TwoWay, FallbackValue=0}" />
+                    <TextBlock
+                        Grid.Column="3"
+                        HorizontalTextAlignment="Right"
+                        VerticalAlignment="Center"
+                        Margin="0,0,0,2"
+                        Text="{x:Bind ViewModel.Master.PercentText, Mode=OneWay, FallbackValue=''}" />
+                </Grid>
+                <TextBlock
+                    Margin="6,8"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="No output device found"
+                    Visibility="{x:Bind ViewModel.NoDeviceVisibility, Mode=OneWay}" />
+
+                <!-- Divider spans the same width as the app cards below. -->
+                <Border Height="1" Margin="-11,10,-13,8" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                <TextBlock Style="{StaticResource SectionLabelStyle}" Text="APPS" />
+            </StackPanel>
+
+            <!-- Apps: one raised rounded card per app, inset from the window edges -->
+            <Grid Grid.Row="1" Margin="8,0">
+                <TextBlock
+                    Margin="13,8"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    Text="No apps are playing audio right now"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind ViewModel.EmptyVisibility, Mode=OneWay}" />
+
+                <ScrollViewer x:Name="AppsScroller" Margin="0,0,-12,0" Padding="0,0,12,0" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="AppsList" ItemsSource="{x:Bind ViewModel.Apps}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Spacing="4" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AppVolumeViewModel">
+                                <Border
+                                    Padding="10,4,12,4"
+                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{ThemeResource OverlayCornerRadius}">
+                                    <Grid ColumnSpacing="6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="38" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <controls:LevelMeter Margin="0,0,-2,0" Style="{StaticResource LevelMeterStyle}" Level="{x:Bind Level, Mode=OneWay}" />
+
+                                        <!-- The app icon is the mute toggle. -->
+                                        <Button
+                                            Grid.Column="1"
+                                            Command="{x:Bind ToggleMuteCommand}"
+                                            Style="{StaticResource IconButtonStyle}"
+                                            AutomationProperties.Name="{x:Bind Name}"
+                                            ToolTipService.ToolTip="{x:Bind Name}">
+                                            <Grid Width="20" Height="20">
+                                                <Grid Opacity="{x:Bind ContentOpacity, Mode=OneWay}">
+                                                    <Image Width="20" Height="20" Source="{x:Bind Icon, Mode=OneWay}" />
+                                                    <FontIcon FontSize="16" Glyph="{x:Bind FallbackGlyph}" Visibility="{x:Bind FallbackIconVisibility, Mode=OneWay}" />
+                                                </Grid>
+                                                <Border
+                                                    Width="14"
+                                                    Height="14"
+                                                    Margin="0,0,-5,-5"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Bottom"
+                                                    Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                                                    CornerRadius="7"
+                                                    Visibility="{x:Bind MutedVisibility, Mode=OneWay}">
+                                                    <FontIcon FontSize="9" Glyph="&#xE74F;" />
+                                                </Border>
+                                            </Grid>
+                                        </Button>
+
+                                        <Slider
+                                            Grid.Column="2"
+                                            VerticalAlignment="Center"
+                                            IsThumbToolTipEnabled="False"
+                                            Maximum="100"
+                                            Minimum="0"
+                                            StepFrequency="1"
+                                            Value="{x:Bind Volume, Mode=TwoWay}" />
+
+                                        <TextBlock
+                                            Grid.Column="3"
+                                            HorizontalTextAlignment="Right"
+                                            VerticalAlignment="Center"
+                                            Margin="0,0,0,2"
+                                            Text="{x:Bind PercentText, Mode=OneWay}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- Footer, on the base layer -->
+            <Grid Grid.Row="2" Height="48" Padding="8,0">
+                <Button
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Click="OnSettingsClick"
+                    Style="{StaticResource IconButtonStyle}"
+                    AutomationProperties.Name="Settings"
+                    ToolTipService.ToolTip="Settings">
+                    <FontIcon FontSize="16" Glyph="&#xE713;" />
+                </Button>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

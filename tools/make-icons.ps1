@@ -1,6 +1,6 @@
-# Renders SoundDeck.ico: the Segoe Fluent "Volume" glyph, white on an accent-blue rounded square,
+# Renders omnisound.ico: the Segoe Fluent "Volume" glyph, white on an accent-blue rounded square,
 # as a multi-size PNG-based .ico. (The tray icon is drawn at runtime by TrayIconRenderer.)
-param([string]$OutDir = "$PSScriptRoot\..\src\SoundDeck.App\Assets")
+param([string]$OutDir = "$PSScriptRoot\..\src\Omnisound.App\Assets")
 
 Add-Type -AssemblyName System.Drawing
 $glyph = [string][char]0xE995   # Volume3
@@ -57,5 +57,5 @@ function Write-Ico([string]$path, [int[]]$sizes) {
 }
 
 New-Item -ItemType Directory -Force $OutDir | Out-Null
-Write-Ico "$OutDir\SoundDeck.ico" (16, 20, 24, 32, 48, 64, 128, 256)
+Write-Ico "$OutDir\omnisound.ico" (16, 20, 24, 32, 48, 64, 128, 256)
 Get-ChildItem $OutDir *.ico | Select-Object Name, Length

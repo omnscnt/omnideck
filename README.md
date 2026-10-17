@@ -1,4 +1,4 @@
-# SoundDeck
+# omnisound.
 
 Утилита управления звуком для Windows 11 — WinUI 3, .NET 8, Windows App SDK 1.8 (unpackaged).
 
@@ -11,21 +11,34 @@
   и закрытии приложений и при смене устройства.
 - Автозапуск через HKCU\…\Run (`--autostart` — тихий старт в трей). Повторный запуск exe открывает микшер.
 
+## Этап 2 — хоткеи
+
+- Окно настроек (шестерёнка во флайауте или «Settings» в меню трея): разделы Hotkeys и General (автозапуск).
+  Хоткей редактируется прямо в карточке (клик — раскрывается вниз, изменения применяются сразу), пунктирная
+  карточка внизу добавляет новый, карточки перетаскиваются для смены порядка.
+- Хоткей по модели Discord: сочетание клавиш + срабатывание (press / double / triple / hold с повтором) + действие
+  (громкость ±N%, mute, play/pause, next, previous) + цель (общая громкость, активное окно, текущий медиаплеер,
+  конкретное приложение). Опционально клавиша блокируется для других программ.
+- Медиакоманды идут через системные медиасессии (GlobalSystemMediaTransportControls) — Spotify, браузеры, плееры.
+- Настройки: `%LOCALAPPDATA%\omnisound\settings.json`.
+
 ## Структура
 
-- `src/SoundDeck.Core` — звуковое ядро без UI (Core Audio через COM напрямую):
+- `src/Omnisound.Core` — звуковое ядро без UI (Core Audio через COM напрямую):
   - `AudioService` — устройство вывода по умолчанию, `Master`, живой список `Apps`, события `AppAdded/AppRemoved/DeviceChanged`,
     `GetOutputDevices()` / `SetDefaultOutput(id)`; поиск для хоткеев: `FindApp("spotify")`, `FindAppByProcessId(pid)`
     (по exe — работает для активного окна браузера/Electron).
   - `AudioApp` — все сессии одного exe в одной громкости: `SetVolume/AdjustVolume/SetMute/ToggleMute/Peak`.
   - `MasterVolume` — громкость устройства, те же методы.
   - Все изменения принимают `Guid context`; события его возвращают, так UI отличает свои изменения от внешних.
-- `src/SoundDeck.App` — трей, флайаут-микшер, меню трея, автозапуск.
-- `tools/make-icons.ps1` — генерирует иконку приложения (`Assets/SoundDeck.ico`).
+  - `Hotkeys/HotkeyEngine` — низкоуровневый хук клавиатуры + автомат срабатываний на каждое сочетание;
+    `HotkeyActionRunner` — выполняет привязку; `Media/MediaSessionService` — системные медиасессии.
+- `src/Omnisound.App` — трей, флайаут-микшер, меню трея, автозапуск.
+- `tools/make-icons.ps1` — генерирует иконку приложения (`Assets/omnisound.ico`).
 
 ## Сборка и запуск
 
 ```
-dotnet build SoundDeck.sln -p:Platform=x64
-src\SoundDeck.App\bin\x64\Debug\net8.0-windows10.0.22621.0\win-x64\SoundDeck.exe
+dotnet build Omnisound.sln -p:Platform=x64
+src\Omnisound.App\bin\x64\Debug\net8.0-windows10.0.22621.0\win-x64\omnisound.exe
 ```
