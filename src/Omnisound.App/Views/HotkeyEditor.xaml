@@ -2,7 +2,8 @@
 <UserControl
     x:Class="Omnisound.Views.HotkeyEditor"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:Omnisound.ViewModels">
 
     <!-- The expanded part of a hotkey card. Changes apply as soon as the hotkey is valid. -->
     <StackPanel Padding="16,14,16,16" Spacing="14">
@@ -75,7 +76,19 @@
                 PlaceholderText="e.g. spotify"
                 KeyUp="OnAppKeyUp"
                 TextSubmitted="OnAppTextSubmitted"
-                SelectionChanged="OnFieldChanged" />
+                SelectionChanged="OnFieldChanged">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:WidgetAppItem">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Grid Width="16" Height="16" VerticalAlignment="Center">
+                                <Image Source="{x:Bind Icon, Mode=OneWay}" />
+                                <FontIcon FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Glyph="&#xE71D;" Visibility="{x:Bind FallbackVisibility, Mode=OneWay}" />
+                            </Grid>
+                            <TextBlock VerticalAlignment="Center" Text="{x:Bind Name}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
         </Grid>
 
         <CheckBox x:Name="BlockBox" Content="Block this key for other apps" Click="OnBlockClick" />

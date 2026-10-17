@@ -56,14 +56,23 @@
                         <FontIcon Glyph="&#xE765;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="General" Tag="general">
+                <NavigationViewItem Content="Taskbar widget" Tag="widget">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE90E;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+            <!-- General settings sit at the bottom of the pane, where Windows puts Settings. -->
+            <NavigationView.FooterMenuItems>
+                <!-- Lifted so its highlight keeps the same 3 px gap to the card's bottom edge as the top item has. -->
+                <NavigationViewItem Margin="0,0,0,7" Content="General" Tag="general">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-            </NavigationView.MenuItems>
+            </NavigationView.FooterMenuItems>
 
-            <Grid>
+            <Grid x:Name="PageHost" SizeChanged="OnPageHostSizeChanged">
                 <!-- Hotkeys page: the list scrolls itself so drag-reordering can auto-scroll. -->
                 <ListView
                     x:Name="HotkeysPage"
@@ -188,40 +197,328 @@
                     </ListView.ItemTemplate>
                 </ListView>
 
+                <!-- Taskbar widget page -->
+                <ScrollViewer x:Name="WidgetPage" Visibility="Collapsed">
+                <Grid x:Name="WidgetContent" Padding="36,8,36,36">
+                    <StackPanel Spacing="4">
+                        <TextBlock Margin="0,0,0,8" Style="{StaticResource TitleTextBlockStyle}" Text="Taskbar widget" />
+                        <TextBlock
+                            Margin="0,0,0,16"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="What's playing, right on the taskbar. Click the title to bring the player forward."
+                            TextWrapping="Wrap" />
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Show the widget" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Hidden while no app is playing media; a paused track stays, dimmed." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="WidgetSwitch" MinWidth="0" OffContent="" OnContent="" Grid.Column="1" HorizontalAlignment="Right" AutomationProperties.Name="Show the widget" Toggled="OnWidgetChanged" />
+                            </Grid>
+                        </Border>
+
+                        <TextBlock Margin="2,20,0,6" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Placement and look" />
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Position" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="With a left-aligned taskbar, the left positions move just after the app icons." />
+                                </StackPanel>
+                                <ComboBox x:Name="WidgetPositionBox" MinWidth="200" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.Name="Position" SelectionChanged="OnWidgetChanged">
+                                    <x:String>Left</x:String>
+                                    <x:String>Before the app icons</x:String>
+                                    <x:String>After the app icons</x:String>
+                                    <x:String>Right, next to the tray</x:String>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Offset" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Fine-tunes the position, in pixels: negative moves left." />
+                                </StackPanel>
+                                <NumberBox x:Name="WidgetOffsetBox" MinWidth="140" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.Name="Offset"
+                                    LargeChange="10" Maximum="1000" Minimum="-1000" SmallChange="2" SpinButtonPlacementMode="Inline" ValueChanged="OnWidgetNumberChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Size" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Small shows the title only." />
+                                </StackPanel>
+                                <ComboBox x:Name="WidgetSizeBox" MinWidth="200" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.Name="Size" SelectionChanged="OnWidgetChanged">
+                                    <x:String>Small</x:String>
+                                    <x:String>Medium</x:String>
+                                    <x:String>Large</x:String>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Text width" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="The widget keeps this width for every track, so the buttons stay in place." />
+                                </StackPanel>
+                                <NumberBox x:Name="WidgetWidthBox" MinWidth="140" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.Name="Text width"
+                                    LargeChange="20" Maximum="500" Minimum="60" SmallChange="10" SpinButtonPlacementMode="Inline" ValueChanged="OnWidgetNumberChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Playback buttons" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Previous, play / pause and next beside the title." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="WidgetControlsSwitch" MinWidth="0" OffContent="" OnContent="" Grid.Column="1" HorizontalAlignment="Right" AutomationProperties.Name="Playback buttons" Toggled="OnWidgetChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Dim when paused" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Fades the whole widget while the track is paused; hovering brings it back." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                                    <Slider x:Name="WidgetDimSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Dim when paused"
+                                        Maximum="80" Minimum="0" StepFrequency="5" ValueChanged="OnWidgetSliderChanged" />
+                                    <TextBlock x:Name="WidgetDimText" Width="36" VerticalAlignment="Center" TextAlignment="Right" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Scroll long titles" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Titles that don't fit scroll by instead of ending in an ellipsis." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="WidgetScrollSwitch" MinWidth="0" OffContent="" OnContent="" Grid.Column="1" HorizontalAlignment="Right" AutomationProperties.Name="Scroll long titles" Toggled="OnWidgetChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Cover backdrop" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="The album art, blurred, behind the widget." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="WidgetBackdropSwitch" MinWidth="0" OffContent="" OnContent="" Grid.Column="1" HorizontalAlignment="Right" AutomationProperties.Name="Cover backdrop" Toggled="OnWidgetChanged" />
+                            </Grid>
+                        </Border>
+
+                        <TextBlock Margin="2,20,0,6" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Apps" />
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Show media from" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Choose which apps the widget may follow." />
+                                </StackPanel>
+                                <ComboBox x:Name="WidgetFilterBox" MinWidth="200" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.Name="Show media from" SelectionChanged="OnWidgetChanged">
+                                    <x:String>All apps</x:String>
+                                    <x:String>Only the apps below</x:String>
+                                    <x:String>All except the apps below</x:String>
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
+                        <StackPanel x:Name="WidgetAppsPanel" Spacing="4">
+                            <ItemsControl x:Name="WidgetAppsList">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Spacing="4" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:WidgetAppItem">
+                                        <Border MinHeight="48" Padding="16,6,8,6" Style="{StaticResource SettingsCardStyle}">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid Width="20" Height="20" VerticalAlignment="Center">
+                                                    <Image Source="{x:Bind Icon, Mode=OneWay}" />
+                                                    <FontIcon FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Glyph="&#xE71D;" Visibility="{x:Bind FallbackVisibility, Mode=OneWay}" />
+                                                </Grid>
+                                                <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="{x:Bind Name}" />
+                                                <Button Grid.Column="2" AutomationProperties.Name="Remove" Click="OnWidgetAppRemove" Style="{StaticResource IconButtonStyle}" Tag="{x:Bind}">
+                                                    <FontIcon FontSize="14" Glyph="&#xE74D;" />
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <Border Style="{StaticResource SettingsCardStyle}">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox
+                                        x:Name="WidgetAppBox"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="App to add"
+                                        DropDownOpened="OnWidgetAppBoxOpened"
+                                        IsEditable="True"
+                                        PlaceholderText="App name, e.g. spotify, chrome, msedge">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:WidgetAppItem">
+                                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                                    <Grid Width="16" Height="16" VerticalAlignment="Center">
+                                                        <Image Source="{x:Bind Icon, Mode=OneWay}" />
+                                                        <FontIcon FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Glyph="&#xE71D;" Visibility="{x:Bind FallbackVisibility, Mode=OneWay}" />
+                                                    </Grid>
+                                                    <TextBlock VerticalAlignment="Center" Text="{x:Bind Name}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <Button Grid.Column="1" VerticalAlignment="Center" Click="OnWidgetAppAdd" Content="Add" />
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+                </ScrollViewer>
+
                 <!-- General page -->
                 <ScrollViewer x:Name="GeneralPage" Visibility="Collapsed">
-                <Grid MaxWidth="900" Padding="36,8,36,36" HorizontalAlignment="Stretch">
+                <Grid x:Name="GeneralContent" Padding="36,8,36,36">
                     <StackPanel Spacing="4">
                         <TextBlock Margin="0,0,0,16" Style="{StaticResource TitleTextBlockStyle}" Text="General" />
 
                         <Border Style="{StaticResource SettingsCardStyle}">
-                            <Grid>
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Start with Windows" />
                                     <TextBlock
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
                                         Text="Starts quietly in the notification area when you sign in." />
                                 </StackPanel>
                                 <ToggleSwitch
                                     x:Name="AutoStartSwitch"
                                     MinWidth="0"
-                                    HorizontalAlignment="Right"
+                                    Grid.Column="1" HorizontalAlignment="Right"
                                     AutomationProperties.Name="Start with Windows"
                                     Toggled="OnAutoStartToggled" />
                             </Grid>
                         </Border>
 
                         <Border Style="{StaticResource SettingsCardStyle}">
-                            <Grid>
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Windows sound settings" />
                                     <TextBlock
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
                                         Text="Devices, formats and the system volume mixer." />
                                 </StackPanel>
-                                <Button HorizontalAlignment="Right" Click="OnWindowsSoundClick" Content="Open" />
+                                <Button Grid.Column="1" HorizontalAlignment="Right" Click="OnWindowsSoundClick" Content="Open" />
                             </Grid>
                         </Border>
 

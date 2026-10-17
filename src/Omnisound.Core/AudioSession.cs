@@ -62,19 +62,33 @@ internal sealed class AudioSession : IDisposable
         }
     }
 
-    public float Volume => _volume.GetMasterVolume(out float v) == 0 ? v : 0f;
+    // After Dispose every member is a harmless no-op: other threads (the mixer's meters) may still hold us.
+    public float Volume => Read(() => _volume.GetMasterVolume(out float v) == 0 ? v : 0f, 0f);
 
-    public bool IsMuted => _volume.GetMute(out bool m) == 0 && m;
+    public bool IsMuted => Read(() => _volume.GetMute(out bool m) == 0 && m, false);
 
-    public float Peak => _meter != null && _meter.GetPeakValue(out float p) == 0 ? p : 0f;
+    public float Peak => _meter == null ? 0f : Read(() => _meter.GetPeakValue(out float p) == 0 ? p : 0f, 0f);
 
     public AudioSessionState State =>
-        _control.GetState(out var s) == 0 ? s : AudioSessionState.Expired;
+        Read(() => _control.GetState(out var s) == 0 ? s : AudioSessionState.Expired, AudioSessionState.Expired);
 
     public void SetVolume(float volume, Guid context) =>
-        _volume.SetMasterVolume(Math.Clamp(volume, 0f, 1f), ref context);
+        Read(() => _volume.SetMasterVolume(Math.Clamp(volume, 0f, 1f), ref context), 0);
 
-    public void SetMute(bool mute, Guid context) => _volume.SetMute(mute, ref context);
+    public void SetMute(bool mute, Guid context) => Read(() => _volume.SetMute(mute, ref context), 0);
+
+    private T Read<T>(Func<T> call, T fallback)
+    {
+        if (Volatile.Read(ref _disposed) != 0) return fallback;
+        try
+        {
+            return call();
+        }
+        catch (Exception ex) when (ex is COMException or InvalidComObjectException)
+        {
+            return fallback; // the session or its device went away
+        }
+    }
 
     private void RaiseEnded() => Ended?.Invoke(this, EventArgs.Empty);
 
@@ -82,7 +96,9 @@ internal sealed class AudioSession : IDisposable
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         try { _control.UnregisterAudioSessionNotification(_events); } catch (COMException) { }
-        Marshal.ReleaseComObject(_control);
+        // No Marshal.ReleaseComObject: releasing while another thread is inside a call on this object
+        // (e.g. a meter read during a device switch) is an access violation. The GC releases it once
+        // nothing references the session any more.
     }
 
     private sealed class SessionEvents(AudioSession owner) : IAudioSessionEvents

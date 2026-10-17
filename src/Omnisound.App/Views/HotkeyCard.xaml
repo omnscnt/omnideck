@@ -24,11 +24,18 @@
                 PointerCanceled="OnHeaderPointerExited"
                 Tapped="OnHeaderTapped">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel VerticalAlignment="Center" Spacing="6">
+                <!-- What the hotkey acts on: the app's icon, or a glyph for master / window / player / mixer. -->
+                <Grid Width="24" Height="24" VerticalAlignment="Center">
+                    <Image Source="{x:Bind Item.Icon, Mode=OneWay}" />
+                    <FontIcon FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Glyph="{x:Bind Item.Glyph, Mode=OneWay}" Visibility="{x:Bind Item.GlyphVisibility, Mode=OneWay}" />
+                </Grid>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="6">
                     <ItemsControl ItemsSource="{x:Bind Item.KeyParts, Mode=OneWay}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -51,7 +58,7 @@
                         TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal" Spacing="4">
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal" Spacing="4">
                     <ToggleSwitch
                         MinWidth="0"
                         AutomationProperties.Name="Enabled"

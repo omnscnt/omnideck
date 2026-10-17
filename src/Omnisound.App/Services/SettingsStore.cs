@@ -1,12 +1,15 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Omnisound.Core.Hotkeys;
+using Omnisound.Taskbar;
 
 namespace Omnisound.Services;
 
 public sealed class AppSettings
 {
     public List<HotkeyBinding> Hotkeys { get; set; } = [];
+
+    public TaskbarWidgetSettings TaskbarWidget { get; set; } = new();
 }
 
 /// <summary>Settings persisted as JSON in %LOCALAPPDATA%\omnisound\settings.json.</summary>

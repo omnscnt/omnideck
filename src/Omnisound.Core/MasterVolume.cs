@@ -33,18 +33,32 @@ public sealed class MasterVolume : IVolumeControl, IDisposable
         _endpoint.RegisterControlChangeNotify(_callback);
     }
 
-    public float Volume => _endpoint.GetMasterVolumeLevelScalar(out float v) == 0 ? v : 0f;
+    // After Dispose every member is a harmless no-op: the mixer and hotkeys may still hold an old master.
+    public float Volume => Read(() => _endpoint.GetMasterVolumeLevelScalar(out float v) == 0 ? v : 0f, 0f);
 
-    public bool IsMuted => _endpoint.GetMute(out bool m) == 0 && m;
+    public bool IsMuted => Read(() => _endpoint.GetMute(out bool m) == 0 && m, false);
 
-    public float Peak => _meter != null && _meter.GetPeakValue(out float p) == 0 ? p : 0f;
+    public float Peak => _meter == null ? 0f : Read(() => _meter.GetPeakValue(out float p) == 0 ? p : 0f, 0f);
 
     public void SetVolume(float volume, Guid context = default) =>
-        _endpoint.SetMasterVolumeLevelScalar(Math.Clamp(volume, 0f, 1f), ref context);
+        Read(() => _endpoint.SetMasterVolumeLevelScalar(Math.Clamp(volume, 0f, 1f), ref context), 0);
 
     public void AdjustVolume(float delta, Guid context = default) => SetVolume(Volume + delta, context);
 
-    public void SetMute(bool mute, Guid context = default) => _endpoint.SetMute(mute, ref context);
+    public void SetMute(bool mute, Guid context = default) => Read(() => _endpoint.SetMute(mute, ref context), 0);
+
+    private T Read<T>(Func<T> call, T fallback)
+    {
+        if (Volatile.Read(ref _disposed) != 0) return fallback;
+        try
+        {
+            return call();
+        }
+        catch (Exception ex) when (ex is COMException or InvalidComObjectException)
+        {
+            return fallback; // the device went away
+        }
+    }
 
     public void ToggleMute(Guid context = default) => SetMute(!IsMuted, context);
 
@@ -52,8 +66,8 @@ public sealed class MasterVolume : IVolumeControl, IDisposable
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         try { _endpoint.UnregisterControlChangeNotify(_callback); } catch (COMException) { }
-        Marshal.ReleaseComObject(_endpoint);
-        if (_meter != null) Marshal.ReleaseComObject(_meter);
+        // No Marshal.ReleaseComObject: another thread may be mid-call (meters poll every frame), and
+        // releasing under it is an access violation. The GC releases the endpoint when unreferenced.
     }
 
     private sealed class EndpointCallback(MasterVolume owner) : IAudioEndpointVolumeCallback

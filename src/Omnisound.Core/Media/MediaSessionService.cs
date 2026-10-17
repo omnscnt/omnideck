@@ -11,7 +11,7 @@ public sealed class MediaSessionService
     private readonly SemaphoreSlim _init = new(1, 1);
     private GlobalSystemMediaTransportControlsSessionManager? _manager;
 
-    private async Task<GlobalSystemMediaTransportControlsSessionManager?> GetManagerAsync()
+    internal async Task<GlobalSystemMediaTransportControlsSessionManager?> GetManagerAsync()
     {
         if (_manager != null) return _manager;
         await _init.WaitAsync().ConfigureAwait(false);
@@ -51,7 +51,12 @@ public sealed class MediaSessionService
     {
         var session = await FindSessionAsync(null).ConfigureAwait(false);
         if (session == null) return null;
-        var id = session.SourceAppUserModelId;
+        return AppNameFromId(session.SourceAppUserModelId);
+    }
+
+    /// <summary>"Spotify.exe", "Chrome", "Pkg_xyz!Spotify" → "spotify", "chrome", "spotify".</summary>
+    public static string AppNameFromId(string id)
+    {
         int bang = id.LastIndexOf('!');
         if (bang >= 0) id = id[(bang + 1)..];
         return Path.GetFileNameWithoutExtension(id).ToLowerInvariant();

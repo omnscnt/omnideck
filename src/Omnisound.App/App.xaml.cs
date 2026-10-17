@@ -4,6 +4,7 @@ using Omnisound.Core;
 using Omnisound.Core.Hotkeys;
 using Omnisound.Core.Media;
 using Omnisound.Services;
+using Omnisound.Taskbar;
 using Omnisound.ViewModels;
 using Omnisound.Views;
 
@@ -19,6 +20,8 @@ public partial class App : Application
     private TrayIconHost? _tray;
     private FlyoutWindow? _flyout;
     private SettingsWindow? _settingsWindow;
+    private NowPlayingWatcher? _nowPlaying;
+    private TaskbarWidget? _widget;
 
     public static App Instance => (App)Current;
 
@@ -28,6 +31,13 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        // Crashes leave nothing in the event log for a WinUI app: write them down ourselves.
+        UnhandledException += (_, e) =>
+        {
+            CrashLog.Write("UI thread", e.Exception);
+            e.Handled = true; // a tray utility should survive a failed click rather than vanish
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => CrashLog.Write("background thread", e.ExceptionObject as Exception);
     }
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
@@ -57,7 +67,8 @@ public partial class App : Application
 
         _settings = SettingsStore.Load();
         AutoStart.Migrate();
-        _runner = new HotkeyActionRunner(_audio, new MediaSessionService());
+        var media = new MediaSessionService();
+        _runner = new HotkeyActionRunner(_audio, media);
         _hotkeys = new HotkeyEngine();
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         _hotkeys.Triggered += binding =>
@@ -70,6 +81,12 @@ public partial class App : Application
 
         _flyout = new FlyoutWindow(new MixerViewModel(_audio, dispatcher));
         _tray = new TrayIconHost(() => _flyout.Toggle(), ShowSettings, Shutdown);
+
+        _nowPlaying = new NowPlayingWatcher(media);
+        _nowPlaying.Filter = _settings.TaskbarWidget.ToFilter();
+        _widget = new TaskbarWidget(_nowPlaying);
+        _widget.Configure(_settings.TaskbarWidget);
+        _ = _nowPlaying.StartAsync();
 
         new Thread(() =>
         {
@@ -115,8 +132,38 @@ public partial class App : Application
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool AllowSetForegroundWindow(int processId);
 
+    /// <summary>A copy of the widget settings, for the settings window to edit.</summary>
+    public TaskbarWidgetSettings TaskbarWidgetSettings => _settings.TaskbarWidget.Clone();
+
+    public void ApplyTaskbarWidget(TaskbarWidgetSettings settings)
+    {
+        _settings.TaskbarWidget = settings.Clone();
+        if (_nowPlaying != null) _nowPlaying.Filter = settings.ToFilter();
+        _widget?.Configure(settings);
+        SettingsStore.Save(_settings);
+    }
+
+    /// <summary>The exe of a running app by name ("spotify"), from the mixer or the process list.</summary>
+    public string? FindExePath(string appName)
+    {
+        var audioApp = _audio?.Apps.FirstOrDefault(a => string.Equals(a.ProcessName, appName, StringComparison.OrdinalIgnoreCase));
+        if (audioApp?.ExecutablePath != null) return audioApp.ExecutablePath;
+        foreach (var process in System.Diagnostics.Process.GetProcessesByName(appName))
+        {
+            using (process)
+                if (ProcessInfo.GetExecutablePath(process.Id) is { } path) return path;
+        }
+        return null;
+    }
+
+    /// <summary>Apps that have a media session or play sound right now, for the widget's app lists.</summary>
+    public IEnumerable<string> MediaAppNames() =>
+        (_nowPlaying?.SessionAppNames() ?? []).Concat(CurrentAppNames()).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n);
+
     private void Shutdown()
     {
+        _widget?.Dispose();
+        _nowPlaying?.Dispose();
         _hotkeys?.Dispose();
         _tray?.Dispose();
         _audio?.Dispose();

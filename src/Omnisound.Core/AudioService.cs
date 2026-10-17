@@ -182,7 +182,7 @@ public sealed class AudioService : IDisposable
         if (manager != null)
         {
             try { manager.UnregisterSessionNotification(_sessionNotifications); } catch (COMException) { }
-            Marshal.ReleaseComObject(manager);
+            // Left to the GC rather than released here, like the sessions and master (see AudioSession.Dispose).
         }
     }
 

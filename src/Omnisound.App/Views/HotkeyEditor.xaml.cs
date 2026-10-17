@@ -24,13 +24,15 @@ public sealed partial class HotkeyEditor : UserControl
         InitializeComponent();
 
         _loading = true;
-        foreach (var name in item.Owner.AppNames().Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n)) AppBox.Items.Add(name);
-        if (_draft.AppName != null && !AppBox.Items.Contains(_draft.AppName)) AppBox.Items.Add(_draft.AppName);
+        // Apps playing sound now (plus the bound one), each with its icon.
+        var names = item.Owner.AppNames().Append(_draft.AppName).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n);
+        foreach (var name in names)
+            AppBox.Items.Add(new WidgetAppItem(name, App.Instance.FindExePath(name) ?? (name == _draft.AppName ? _draft.AppPath : null)));
         TriggerBox.SelectedIndex = (int)_draft.Trigger;
         ActionBox.SelectedIndex = (int)_draft.Action;
         TargetBox.SelectedIndex = (int)_draft.Target;
         StepBox.Value = _draft.Step;
-        if (_draft.AppName != null) AppBox.SelectedItem = _draft.AppName;
+        if (_draft.AppName != null) AppBox.SelectedItem = AppBox.Items.OfType<WidgetAppItem>().FirstOrDefault(a => a.Name == _draft.AppName);
         BlockBox.IsChecked = _draft.BlockKey;
         _loading = false;
 
@@ -81,8 +83,12 @@ public sealed partial class HotkeyEditor : UserControl
         _draft.Action = (HotkeyAction)Math.Max(0, ActionBox.SelectedIndex);
         _draft.Target = (HotkeyTarget)Math.Max(0, TargetBox.SelectedIndex);
         _draft.Step = double.IsNaN(StepBox.Value) ? 5 : (int)Math.Round(StepBox.Value);
-        string app = (AppBox.SelectedItem as string ?? AppBox.Text ?? "").Trim();
+        string app = (AppBox.SelectedItem?.ToString() ?? AppBox.Text ?? "").Trim();
+        string? previous = _draft.AppName;
         _draft.AppName = app.Length == 0 ? null : Path.GetFileNameWithoutExtension(app).ToLowerInvariant();
+        if (_draft.AppName != previous || _draft.AppPath == null)
+            _draft.AppPath = _draft.AppName == null ? null
+                : (AppBox.SelectedItem as WidgetAppItem)?.ExePath ?? App.Instance.FindExePath(_draft.AppName) ?? (_draft.AppName == previous ? _draft.AppPath : null);
         _draft.BlockKey = BlockBox.IsChecked == true;
     }
 

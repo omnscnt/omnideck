@@ -57,6 +57,9 @@ public sealed class HotkeyBinding
     /// <summary>Process name ("spotify") when <see cref="Target"/> is <see cref="HotkeyTarget.App"/>.</summary>
     public string? AppName { get; set; }
 
+    /// <summary>The app's exe when it was picked, so its icon shows even while it isn't running.</summary>
+    public string? AppPath { get; set; }
+
     /// <summary>Volume step in percent for VolumeUp/VolumeDown.</summary>
     public int Step { get; set; } = 5;
 

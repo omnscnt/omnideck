@@ -1,6 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 using Omnisound.Core.Hotkeys;
+using Omnisound.Services;
 
 namespace Omnisound.ViewModels;
 
@@ -24,6 +26,37 @@ public sealed partial class HotkeyItemViewModel : ObservableObject
     {
         Binding = binding;
         Owner = owner;
+        _ = LoadIconAsync();
+    }
+
+    // ---- icon: the target app's own icon, or a glyph for the other targets -------------------------
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(GlyphVisibility))]
+    private ImageSource? _icon;
+
+    public Visibility GlyphVisibility => Icon == null ? Visibility.Visible : Visibility.Collapsed;
+
+    public string Glyph => Binding switch
+    {
+        { IsAppAction: true } => "",                 // mixer
+        { Target: HotkeyTarget.App } => "",          // app (until its icon loads)
+        { Target: HotkeyTarget.ActiveWindow } => "", // windows
+        { Target: HotkeyTarget.MediaPlayer } => "",  // note
+        { IsVolumeAction: true } => "",              // speaker: master volume
+        _ => "",                                     // current media
+    };
+
+    private async Task LoadIconAsync()
+    {
+        var binding = Binding;
+        string? path = binding.Target == HotkeyTarget.App && !binding.IsAppAction && !string.IsNullOrEmpty(binding.AppName)
+            ? App.Instance.FindExePath(binding.AppName) ?? binding.AppPath
+            : null;
+        // Remember a running app's exe (bindings made before paths were kept): saved with the next change.
+        if (path != null && binding.Target == HotkeyTarget.App) binding.AppPath ??= path;
+        var icon = await AppIconLoader.LoadAsync(path);
+        if (ReferenceEquals(binding, Binding)) Icon = icon; // still the same binding
     }
 
     public IReadOnlyList<string> KeyParts => Binding.Keys.Parts;
@@ -48,6 +81,7 @@ public sealed partial class HotkeyItemViewModel : ObservableObject
     {
         Binding = binding;
         OnPropertyChanged(string.Empty); // everything changed
+        _ = LoadIconAsync();
     }
 
     public static string Describe(HotkeyBinding b)
