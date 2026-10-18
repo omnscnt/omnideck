@@ -15,15 +15,17 @@
 
         <!-- Custom title bar (content extends into it) -->
         <Grid x:Name="TitleBar" Height="32" Padding="8,0,0,0">
-            <!-- Wordmark in Outfit Bold (bundled, OFL: Assets/Fonts), level with the caption buttons. -->
+            <!-- Wordmark in Outfit Bold (bundled, OFL: Assets/Fonts), level with the caption buttons, and the
+                 version after it in the same font, smaller and dimmer, on the same baseline (set in code). -->
             <TextBlock
                 Margin="0,4,0,0"
                 VerticalAlignment="Top"
                 FontFamily="ms-appx:///Assets/Fonts/Outfit.ttf#Outfit"
                 FontSize="18"
                 FontWeight="Bold"
-                Foreground="{ThemeResource OmnisoundTitleForeground}"
-                Text="omnisound." />
+                Foreground="{ThemeResource OmnisoundTitleForeground}">
+                <Run Text="omnisound." /><Run x:Name="VersionRun" FontSize="12" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            </TextBlock>
         </Grid>
 
         <NavigationView

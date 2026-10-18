@@ -25,6 +25,7 @@ public sealed partial class SettingsWindow : Window
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
+        VersionRun.Text = "  " + Updater.CurrentText;
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "omnisound.ico"));
         CenterOnScreen(820, 600);
         if (AppWindow.Presenter is OverlappedPresenter presenter)
