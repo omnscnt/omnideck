@@ -8,6 +8,7 @@
     <AssemblyName>omnisound</AssemblyName>
     <AssemblyTitle>omnisound.</AssemblyTitle>
     <Product>omnisound.</Product>
+    <Version>0.1.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\omnisound.ico</ApplicationIcon>
     <Platforms>x64;ARM64</Platforms>
@@ -37,5 +38,23 @@
   <ItemGroup>
     <ProjectReference Include="..\Omnisound.Core\Omnisound.Core.csproj" />
   </ItemGroup>
+
+  <!-- Windows App SDK's self-contained mode copies every component, the unused AI / ML ones too
+       (onnxruntime, DirectML and friends: ~44 MB). Dropped from the published folder. -->
+  <Target Name="RemoveUnusedAppSdkComponents" AfterTargets="Publish">
+    <ItemGroup>
+      <_UnusedAppSdk Include="$(PublishDir)onnxruntime*.dll;$(PublishDir)DirectML.dll;$(PublishDir)Microsoft.Windows.AI.*;$(PublishDir)Microsoft.Windows.Workloads*;$(PublishDir)workloads*.json;$(PublishDir)Microsoft.Graphics.Imaging.dll;$(PublishDir)SessionHandleIPCProxyStub.dll;$(PublishDir)NpuDetect\**" />
+    </ItemGroup>
+    <Delete Files="@(_UnusedAppSdk)" />
+    <RemoveDir Directories="$(PublishDir)NpuDetect" />
+  </Target>
+
+  <!-- Unpackaged publish leaves out the app's resource index and compiled XAML (XamlParseException at start). -->
+  <Target Name="PublishXamlResources" AfterTargets="Publish">
+    <ItemGroup>
+      <_XamlResources Include="$(OutDir)$(TargetName).pri;$(OutDir)**\*.xbf" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_XamlResources)" DestinationFiles="@(_XamlResources->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
 
 </Project>

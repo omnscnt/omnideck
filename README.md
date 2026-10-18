@@ -2,6 +2,15 @@
 
 Утилита управления звуком для Windows 11 — WinUI 3, .NET 8, Windows App SDK 1.8 (unpackaged).
 
+## Установка
+
+1. Скачайте `omnisound-<версия>-win-x64.zip` со страницы [Releases](../../releases) и распакуйте в любую папку
+   (например `%LOCALAPPDATA%\Programs\omnisound`).
+2. Запустите `omnisound.exe` — иконка появится в трее. Автозапуск включается в Settings → General.
+
+Сборка самодостаточная: .NET и Windows App SDK внутри, ничего доустанавливать не нужно. Windows 10 1809+ / 11, x64.
+Собрать самому: `powershell -ExecutionPolicy Bypass -File tools/publish.ps1` (результат в `artifacts\`).
+
 ## Что умеет (этап 1 — микшер)
 
 - Иконка в трее (H.NotifyIcon), рисуется в рантайме под DPI таскбара; ЛКМ — микшер, ПКМ — меню в стиле Windows 11.
