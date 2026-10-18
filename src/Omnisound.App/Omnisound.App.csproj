@@ -8,7 +8,7 @@
     <AssemblyName>omnisound</AssemblyName>
     <AssemblyTitle>omnisound.</AssemblyTitle>
     <Product>omnisound.</Product>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\omnisound.ico</ApplicationIcon>
     <Platforms>x64;ARM64</Platforms>
