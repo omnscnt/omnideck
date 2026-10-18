@@ -57,6 +57,13 @@ public sealed partial class FlyoutWindow : Window
         ViewModel.Apps.CollectionChanged += (_, _) => QueueResize();
         ViewModel.PropertyChanged += (_, _) => QueueResize();
 
+        // No DWM show/hide transition: the slide is the animation, and a fade after it reads as a glitch.
+        int disabled = 1;
+        DwmSetWindowAttribute(_hwnd, 3 /* DWMWA_TRANSITIONS_FORCEDISABLED */, ref disabled, sizeof(int));
+
+        _taskbarWatch = DispatcherQueue.CreateTimer();
+        _taskbarWatch.Interval = TimeSpan.FromMilliseconds(15);
+        _taskbarWatch.Tick += (_, _) => FollowTaskbar();
     }
 
     public bool IsOpen => _isOpen;
@@ -84,6 +91,7 @@ public sealed partial class FlyoutWindow : Window
         AppsScroller.ChangeView(null, 0, null, true);
         QueueResize(); // Item templates realize on the first layout pass; re-measure once they exist.
         ViewModel.StartMetering();
+        _taskbarWatch.Start();
 
         StartSlide(entering: true, ShowDuration, onDone: null);
     }
@@ -122,8 +130,29 @@ public sealed partial class FlyoutWindow : Window
 
         StartSlide(entering: false, HideDuration, onDone: () =>
         {
-            if (!_isOpen) AppWindow.Hide();
+            if (_isOpen) return;
+            _taskbarWatch.Stop();
+            // Cloaked first: the last position still leaves the top edge and shadow on screen (with an
+            // auto-hidden taskbar nothing covers them) for the frame or two that Hide takes. Show re-cloaks anyway.
+            SetCloaked(true);
+            AppWindow.Hide();
         });
+    }
+
+    // ---- auto-hidden taskbar -------------------------------------------------------------------
+
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _taskbarWatch;
+
+    /// <summary>
+    /// An auto-hidden taskbar slides in and out while the flyout is open: keep the flyout just above it,
+    /// or down at the screen edge while it is hidden. Polled, as nothing signals the taskbar moving.
+    /// </summary>
+    private void FollowTaskbar()
+    {
+        var anchor = TaskbarPlacement.Refresh(_anchor);
+        if (anchor == _anchor) return;
+        _anchor = anchor;
+        UpdateBounds();
     }
 
     // ---- window slide ------------------------------------------------------------------------

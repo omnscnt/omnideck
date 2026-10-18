@@ -19,7 +19,19 @@ public static class TaskbarPlacement
     public static TaskbarAnchor Capture()
     {
         GetCursorPos(out var cursor);
-        var display = DisplayArea.GetFromPoint(new PointInt32(cursor.X, cursor.Y), DisplayAreaFallback.Nearest);
+        var point = new PointInt32(cursor.X, cursor.Y);
+        return Measure(DisplayArea.GetFromPoint(point, DisplayAreaFallback.Nearest), point, GetScale(cursor));
+    }
+
+    /// <summary>
+    /// The same monitor as <paramref name="anchor"/>, with the taskbar as it is now: an auto-hidden one
+    /// slides in and out while a flyout is open, and the flyout follows it.
+    /// </summary>
+    public static TaskbarAnchor Refresh(TaskbarAnchor anchor) =>
+        Measure(DisplayArea.GetFromPoint(anchor.Cursor, DisplayAreaFallback.Nearest), anchor.Cursor, anchor.Scale);
+
+    private static TaskbarAnchor Measure(DisplayArea display, PointInt32 cursor, double scale)
+    {
         var work = display.WorkArea;
         var outer = display.OuterBounds;
 
@@ -29,21 +41,37 @@ public static class TaskbarPlacement
             : work.X + work.Width < outer.X + outer.Width ? TaskbarEdge.Right
             : TaskbarEdge.Bottom;
 
-        // Auto-hidden taskbar: the work area is the whole screen, so carve the taskbar out ourselves.
-        if (work.Equals(outer) && TryGetTaskbar(out var barEdge, out var bar)
-            && bar.Right > outer.X && bar.Left < outer.X + outer.Width
-            && bar.Bottom > outer.Y && bar.Top < outer.Y + outer.Height)
+        // Auto-hidden taskbar: the work area is the whole screen, so carve out the part of the taskbar
+        // that is on screen right now. Hidden, it leaves only a sliver of a couple of pixels, and the
+        // flyout sits down at the screen edge instead of above an empty strip.
+        if (work.Equals(outer) && TryGetTaskbar(outer, out var bar))
         {
-            switch (barEdge)
+            int outerRight = outer.X + outer.Width, outerBottom = outer.Y + outer.Height;
+            bool horizontal = bar.Right - bar.Left >= bar.Bottom - bar.Top;
+            int visible = horizontal
+                ? Math.Min(bar.Bottom, outerBottom) - Math.Max(bar.Top, outer.Y)
+                : Math.Min(bar.Right, outerRight) - Math.Max(bar.Left, outer.X);
+            if (visible <= 4 * scale) visible = 0;
+
+            if (horizontal && bar.Top + bar.Bottom < outer.Y + outerBottom)
             {
-                case 0: edge = TaskbarEdge.Left; work.X = bar.Right; work.Width -= bar.Right - outer.X; break;
-                case 1: edge = TaskbarEdge.Top; work.Y = bar.Bottom; work.Height -= bar.Bottom - outer.Y; break;
-                case 2: edge = TaskbarEdge.Right; work.Width = bar.Left - outer.X; break;
-                default: edge = TaskbarEdge.Bottom; work.Height = bar.Top - outer.Y; break;
+                edge = TaskbarEdge.Top; work.Y += visible; work.Height -= visible;
+            }
+            else if (horizontal)
+            {
+                edge = TaskbarEdge.Bottom; work.Height -= visible;
+            }
+            else if (bar.Left + bar.Right < outer.X + outerRight)
+            {
+                edge = TaskbarEdge.Left; work.X += visible; work.Width -= visible;
+            }
+            else
+            {
+                edge = TaskbarEdge.Right; work.Width -= visible;
             }
         }
 
-        return new TaskbarAnchor(edge, work, new PointInt32(cursor.X, cursor.Y), GetScale(cursor));
+        return new TaskbarAnchor(edge, work, cursor, scale);
     }
 
     public static void BringToFront(IntPtr hwnd) => SetForegroundWindow(hwnd);
@@ -65,13 +93,31 @@ public static class TaskbarPlacement
         return GetDpiForMonitor(monitor, 0, out uint dpiX, out _) == 0 ? dpiX / 96.0 : 1.0;
     }
 
-    private static bool TryGetTaskbar(out uint edge, out RECT rect)
+    /// <summary>The taskbar window on this monitor (the main one or a secondary monitor's), wherever it is now.</summary>
+    private static bool TryGetTaskbar(RectInt32 outer, out RECT rect)
     {
-        var data = new APPBARDATA { cbSize = Marshal.SizeOf<APPBARDATA>() };
-        bool ok = SHAppBarMessage(5 /* ABM_GETTASKBARPOS */, ref data) != IntPtr.Zero;
-        edge = data.uEdge;
-        rect = data.rc;
-        return ok;
+        int outerRight = outer.X + outer.Width, outerBottom = outer.Y + outer.Height;
+        foreach (var className in new[] { "Shell_TrayWnd", "Shell_SecondaryTrayWnd" })
+        {
+            for (var hwnd = FindWindowEx(IntPtr.Zero, IntPtr.Zero, className, null); hwnd != IntPtr.Zero;
+                 hwnd = FindWindowEx(IntPtr.Zero, hwnd, className, null))
+            {
+                if (!IsWindowVisible(hwnd) || !GetWindowRect(hwnd, out var r)) continue;
+                // Along its length the bar lies on this monitor; across it, it may be slid off the edge.
+                bool horizontal = r.Right - r.Left >= r.Bottom - r.Top;
+                int along = horizontal
+                    ? Math.Min(r.Right, outerRight) - Math.Max(r.Left, outer.X)
+                    : Math.Min(r.Bottom, outerBottom) - Math.Max(r.Top, outer.Y);
+                bool touches = r.Right >= outer.X && r.Left <= outerRight && r.Bottom >= outer.Y && r.Top <= outerBottom;
+                if (touches && along * 2 > (horizontal ? r.Right - r.Left : r.Bottom - r.Top))
+                {
+                    rect = r;
+                    return true;
+                }
+            }
+        }
+        rect = default;
+        return false;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -87,19 +133,14 @@ public static class TaskbarPlacement
         public int Left, Top, Right, Bottom;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct APPBARDATA
-    {
-        public int cbSize;
-        public IntPtr hWnd;
-        public uint uCallbackMessage;
-        public uint uEdge;
-        public RECT rc;
-        public IntPtr lParam;
-    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string className, string? windowName);
 
-    [DllImport("shell32.dll")]
-    private static extern IntPtr SHAppBarMessage(uint message, ref APPBARDATA data);
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hwnd);
 
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out POINT point);
