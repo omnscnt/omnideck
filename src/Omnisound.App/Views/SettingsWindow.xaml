@@ -775,6 +775,48 @@
                             </Grid>
                         </Border>
 
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Updates" />
+                                    <TextBlock
+                                        x:Name="UpdateStatusText"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap" />
+                                    <ProgressBar x:Name="UpdateProgress" Margin="0,8,0,0" Maximum="1" Visibility="Collapsed" />
+                                </StackPanel>
+                                <Button x:Name="UpdateButton" Grid.Column="1" HorizontalAlignment="Right" Click="OnUpdateClick" Content="Check for updates" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Check for updates automatically" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Looks for a new version on GitHub once a day and lets you know in the notification area." />
+                                </StackPanel>
+                                <ToggleSwitch
+                                    x:Name="AutoUpdateSwitch"
+                                    MinWidth="0"
+                                    Grid.Column="1" HorizontalAlignment="Right"
+                                    AutomationProperties.Name="Check for updates automatically"
+                                    Toggled="OnAutoUpdateToggled" />
+                            </Grid>
+                        </Border>
+
                         <TextBlock
                             x:Name="SettingsPathText"
                             Margin="2,12,0,0"

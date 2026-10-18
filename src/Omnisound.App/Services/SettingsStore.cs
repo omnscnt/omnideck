@@ -13,6 +13,17 @@ public sealed class AppSettings
     public TaskbarWidgetSettings TaskbarWidget { get; set; } = new();
 
     public VolumeOsdSettings VolumeOsd { get; set; } = new();
+
+    public UpdateSettings Updates { get; set; } = new();
+}
+
+public sealed class UpdateSettings
+{
+    /// <summary>Look for a new release a minute after start and then once a day.</summary>
+    public bool CheckAutomatically { get; set; } = true;
+
+    /// <summary>The release already announced in the tray, so each one is announced once.</summary>
+    public string? AnnouncedVersion { get; set; }
 }
 
 /// <summary>Settings persisted as JSON in %LOCALAPPDATA%\omnisound\settings.json.</summary>

@@ -40,6 +40,7 @@ public sealed partial class SettingsWindow : Window
         AutoStartSwitch.IsOn = AutoStart.IsEnabled;
         LoadWidgetSettings();
         LoadOsdSettings();
+        LoadUpdateSettings();
         SettingsPathText.Text = $"Settings are stored in {SettingsStore.FilePath}";
     }
 
@@ -346,6 +347,64 @@ public sealed partial class SettingsWindow : Window
 
     private async void OnWindowsSoundClick(object sender, RoutedEventArgs e) =>
         await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:sound"));
+
+    // ---- updates ----------------------------------------------------------------------------------
+
+    private UpdateInfo? _update;
+    private bool _updateBusy;
+
+    private void LoadUpdateSettings()
+    {
+        AutoUpdateSwitch.IsOn = App.Instance.CheckUpdatesAutomatically;
+        UpdateStatusText.Text = $"Version {Updater.CurrentText}";
+    }
+
+    private void OnAutoUpdateToggled(object sender, RoutedEventArgs e)
+    {
+        if (AutoUpdateSwitch.IsOn != App.Instance.CheckUpdatesAutomatically) App.Instance.CheckUpdatesAutomatically = AutoUpdateSwitch.IsOn;
+    }
+
+    /// <summary>First click checks; when a newer release exists the button becomes "Update now", which installs it.</summary>
+    private async void OnUpdateClick(object sender, RoutedEventArgs e)
+    {
+        if (_updateBusy) return;
+        _updateBusy = true;
+        UpdateButton.IsEnabled = false;
+        try
+        {
+            if (_update == null)
+            {
+                UpdateStatusText.Text = "Checking…";
+                _update = await Updater.CheckAsync();
+                if (_update == null)
+                {
+                    UpdateStatusText.Text = $"You have the latest version ({Updater.CurrentText}).";
+                    return;
+                }
+                UpdateStatusText.Text = $"Version {Updater.Format(_update.Version)} is available (you have {Updater.CurrentText})."
+                    + (Updater.CanInstall ? "" : " This is a development build: install releases from GitHub.");
+                UpdateButton.Content = "Update now";
+                return;
+            }
+
+            UpdateStatusText.Text = $"Downloading version {Updater.Format(_update.Version)}…";
+            UpdateProgress.Value = 0;
+            UpdateProgress.Visibility = Visibility.Visible;
+            await Updater.PrepareAsync(_update, new Progress<double>(p => UpdateProgress.Value = p));
+            UpdateStatusText.Text = "Restarting…";
+            App.Instance.ExitForUpdate();
+        }
+        catch (Exception ex)
+        {
+            UpdateStatusText.Text = $"Couldn't {(_update == null ? "check for updates" : "update")}: {ex.Message}";
+            UpdateProgress.Visibility = Visibility.Collapsed;
+        }
+        finally
+        {
+            _updateBusy = false;
+            UpdateButton.IsEnabled = _update == null || Updater.CanInstall;
+        }
+    }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hwnd);

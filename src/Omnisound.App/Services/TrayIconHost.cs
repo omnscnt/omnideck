@@ -40,6 +40,9 @@ public sealed class TrayIconHost : IDisposable
 
     public void ShowMenu() => _menuWindow.ShowAtCursor();
 
+    /// <summary>A balloon from the tray icon (Windows shows it as a notification).</summary>
+    public void Notify(string title, string message) => _icon.ShowNotification(title, message);
+
     public void Dispose()
     {
         _icon.Dispose();

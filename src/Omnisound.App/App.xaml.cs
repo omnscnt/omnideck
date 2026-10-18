@@ -25,6 +25,7 @@ public partial class App : Application
     private TaskbarWidget? _widget;
     private VolumeOsd? _osd;
     private VolumeOsdFeed? _osdFeed;
+    private Timer? _updateTimer;
 
     public static App Instance => (App)Current;
 
@@ -109,7 +110,10 @@ public partial class App : Application
             }
         }) { IsBackground = true, Name = "Omnisound instance signals" }.Start();
 
-        bool fromAutostart = cmdArgs.Contains(AutoStart.LaunchArgument);
+        bool updated = cmdArgs.Contains(Updater.UpdatedArgument);
+        bool fromAutostart = cmdArgs.Contains(AutoStart.LaunchArgument) || updated;
+        if (updated) _tray.Notify("omnisound. updated", $"Version {Updater.CurrentText} is installed.");
+        StartUpdateChecks(dispatcher);
         if (!fromAutostart) _flyout.Show(); // Manual launch: show that we're alive.
         else _flyout.Prewarm(); // tray-only start: warm the window up so the first open is clean
     }
@@ -188,8 +192,53 @@ public partial class App : Application
 
     public void PreviewVolumeOsd() => _osdFeed?.Preview();
 
+    // ---- updates ----------------------------------------------------------------------------------
+
+    public bool CheckUpdatesAutomatically
+    {
+        get => _settings.Updates.CheckAutomatically;
+        set
+        {
+            _settings.Updates.CheckAutomatically = value;
+            SettingsStore.Save(_settings);
+        }
+    }
+
+    /// <summary>
+    /// A minute after start, then daily: announce a new release in the tray (once per release). A thread-pool
+    /// timer, so it costs nothing in between; failures (offline) just wait for the next round.
+    /// </summary>
+    private void StartUpdateChecks(DispatcherQueue dispatcher)
+    {
+        _updateTimer = new Timer(_ =>
+        {
+            if (!_settings.Updates.CheckAutomatically) return;
+            UpdateInfo? update;
+            try
+            {
+                update = Updater.CheckAsync().GetAwaiter().GetResult();
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+            {
+                return;
+            }
+            if (update == null || update.Tag == _settings.Updates.AnnouncedVersion) return;
+            dispatcher.TryEnqueue(() =>
+            {
+                _settings.Updates.AnnouncedVersion = update.Tag;
+                SettingsStore.Save(_settings);
+                _tray?.Notify("omnisound. update available",
+                    $"Version {Updater.Format(update.Version)} is out. Install it in Settings > General.");
+            });
+        }, null, TimeSpan.FromMinutes(1), TimeSpan.FromDays(1));
+    }
+
+    /// <summary>The update is unpacked and its script waits for us: quit so it can replace the files.</summary>
+    public void ExitForUpdate() => Shutdown();
+
     private void Shutdown()
     {
+        _updateTimer?.Dispose();
         _osd?.Dispose();
         _widget?.Dispose();
         _nowPlaying?.Dispose();
