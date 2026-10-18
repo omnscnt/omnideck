@@ -1,6 +1,8 @@
 ﻿using CommunityToolkit.Mvvm.Input;
 using H.NotifyIcon;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.Win32;
+using Windows.UI.ViewManagement;
 
 namespace Omnisound.Services;
 
@@ -9,10 +11,15 @@ public sealed class TrayIconHost : IDisposable
 {
     private readonly TaskbarIcon _icon;
     private readonly Views.TrayMenuWindow _menuWindow;
+    private readonly UISettings _uiSettings = new();
+    private readonly Microsoft.UI.Dispatching.DispatcherQueue _dispatcher;
     private System.Drawing.Icon? _currentIcon;
+    private bool? _lightTaskbar;
 
     public TrayIconHost(Action toggleFlyout, Action openSettings, Action exit)
     {
+        _dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+
         // Real WinUI MenuFlyout → Windows 11 look (rounded acrylic, icons, animation), positioned by us.
         // No toggle items: they reserve a checkmark column and push every label right
         // (autostart lives in the settings window instead).
@@ -31,12 +38,37 @@ public sealed class TrayIconHost : IDisposable
             NoLeftClickDelay = true,
             LeftClickCommand = new RelayCommand(toggleFlyout),
         };
-        _currentIcon = TrayIconRenderer.Load(TrayIconRenderer.TraySize);
-        _icon.Icon = _currentIcon;
+        UpdateIconForTheme();
         _icon.ForceCreate(enablesEfficiencyMode: false); // Efficiency mode would throttle the flyout.
+
+        // Taskbar light/dark switches arrive as a color-values change.
+        _uiSettings.ColorValuesChanged += (_, _) => _dispatcher.TryEnqueue(UpdateIconForTheme);
     }
 
     private static FontIcon Glyph(string glyph) => new() { Glyph = glyph };
+
+    private void UpdateIconForTheme()
+    {
+        bool light = IsTaskbarLight();
+        if (_lightTaskbar == light) return;
+        _lightTaskbar = light;
+
+        var previous = _currentIcon;
+        var color = light ? System.Drawing.Color.FromArgb(25, 25, 25) : System.Drawing.Color.White;
+        _currentIcon = TrayIconRenderer.Render("", color, TrayIconRenderer.TraySize);
+        _icon.Icon = _currentIcon;
+#if DEBUG
+        // Pixel-exact copy of what the tray receives, for checking rasterisation without capturing the taskbar.
+        using (var png = _currentIcon.ToBitmap()) png.Save(Path.Combine(Path.GetTempPath(), "Omnisound-tray.png"));
+#endif
+        previous?.Dispose();
+    }
+
+    private static bool IsTaskbarLight()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+        return key?.GetValue("SystemUsesLightTheme") is int value && value == 1;
+    }
 
     public void ShowMenu() => _menuWindow.ShowAtCursor();
 
