@@ -389,6 +389,24 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Hide in fullscreen" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="The widget disappears while a video or game fills the screen." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="WidgetFullscreenSwitch" MinWidth="0" OffContent="" OnContent="" Grid.Column="1" HorizontalAlignment="Right" AutomationProperties.Name="Hide in fullscreen" Toggled="OnWidgetChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Cover backdrop" />
                                     <TextBlock
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"

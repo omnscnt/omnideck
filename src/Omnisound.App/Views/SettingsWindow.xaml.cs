@@ -190,6 +190,7 @@ public sealed partial class SettingsWindow : Window
         WidgetDimSlider.Value = _widget.PausedDim;
         WidgetDimText.Text = $"{_widget.PausedDim}%";
         WidgetScrollSwitch.IsOn = _widget.ScrollTitles;
+        WidgetFullscreenSwitch.IsOn = _widget.HideInFullscreen;
         WidgetFilterBox.SelectedIndex = (int)_widget.FilterMode;
         foreach (var app in _widget.FilterApps)
         {
@@ -221,6 +222,7 @@ public sealed partial class SettingsWindow : Window
         _widget.CoverBackdrop = WidgetBackdropSwitch.IsOn;
         _widget.PausedDim = (int)Math.Round(WidgetDimSlider.Value);
         _widget.ScrollTitles = WidgetScrollSwitch.IsOn;
+        _widget.HideInFullscreen = WidgetFullscreenSwitch.IsOn;
         WidgetDimText.Text = $"{_widget.PausedDim}%";
         _widget.FilterMode = (MediaFilterMode)Math.Max(0, WidgetFilterBox.SelectedIndex);
         _widget.FilterApps = [.. _widgetApps.Select(a => a.Name)];

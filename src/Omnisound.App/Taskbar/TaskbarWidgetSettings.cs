@@ -38,6 +38,9 @@ public sealed class TaskbarWidgetSettings
     /// <summary>Titles too long for the column scroll instead of ending in an ellipsis.</summary>
     public bool ScrollTitles { get; set; } = true;
 
+    /// <summary>Hidden while a fullscreen window (video, game) is in front on the taskbar's monitor.</summary>
+    public bool HideInFullscreen { get; set; } = true;
+
     /// <summary>Blurred cover art behind the widget.</summary>
     public bool CoverBackdrop { get; set; } = true;
 

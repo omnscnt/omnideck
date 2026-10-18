@@ -26,6 +26,8 @@ public sealed class TaskbarWidget : IDisposable
     private readonly object _gate = new();
     private readonly Thread _thread;
     private readonly WndProc _wndProc; // kept alive while the window class exists
+    private readonly WinEventProc _winEventProc; // kept alive while the hook exists
+    private IntPtr _foregroundHook;
     private readonly TaskbarWidgetView _view = new();
 
     private IntPtr _hwnd;
@@ -43,7 +45,12 @@ public sealed class TaskbarWidget : IDisposable
     private bool _hovered, _trackingMouse, _light, _animating;
     private WidgetPart _hot, _pressed;
     private double _hoverLevel, _dimLevel, _lastTick, _marqueeStart;
+    private bool _marqueeResting = true; // at the start, not moving (set by the frame timer)
     private string? _marqueeKey;
+    private double _scale = 1;
+    private uint _frameMs;
+    private (int Left, int Width, int Height) _placement;
+    private ((int Left, int Width, int Height), bool) _drawn;
 
     // What is on screen (it can lag the incoming track while its cover loads), and the slide between tracks.
     private NowPlaying? _shown, _previous;
@@ -56,6 +63,7 @@ public sealed class TaskbarWidget : IDisposable
     {
         _watcher = watcher;
         _wndProc = WindowProc;
+        _winEventProc = OnForegroundChanged;
         watcher.Changed += OnTrackChanged;
         _track = watcher.Current;
         _thread = new Thread(Run) { IsBackground = true, Name = "omnisound taskbar widget" };
@@ -126,6 +134,10 @@ public sealed class TaskbarWidget : IDisposable
         _hwnd = CreateWindowEx(WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, wc.lpszClassName, "omnisound widget",
             unchecked((uint)WS_POPUP), 0, 0, 1, 1, IntPtr.Zero, IntPtr.Zero, wc.hInstance, IntPtr.Zero);
         SetTimer(_hwnd, (IntPtr)RefreshTimer, RefreshIntervalMs, IntPtr.Zero);
+        // Another window coming to the front may be (or leave) a fullscreen one. Out-of-context: the
+        // callback arrives through this thread's message loop. Fullscreen toggled inside the same
+        // window (F11) is caught by the refresh timer.
+        _foregroundHook = SetWinEventHook(3 /* EVENT_SYSTEM_FOREGROUND */, 3, IntPtr.Zero, _winEventProc, 0, 0, 2 /* WINEVENT_SKIPOWNPROCESS */);
         Update();
 
         while (GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
@@ -162,12 +174,13 @@ public sealed class TaskbarWidget : IDisposable
                 else
                 {
                     if (wParam == (IntPtr)PendingTimer) KillTimer(hwnd, (IntPtr)PendingTimer);
-                    Update();
+                    Update(refresh: wParam == (IntPtr)RefreshTimer);
                 }
                 return IntPtr.Zero;
 
             case WM_APP_QUIT:
                 KillTimer(hwnd, (IntPtr)RefreshTimer);
+                if (_foregroundHook != IntPtr.Zero) UnhookWinEvent(_foregroundHook);
                 StopAnimation();
                 DestroyWindow(hwnd);
                 PostQuitMessage(0);
@@ -273,21 +286,26 @@ public sealed class TaskbarWidget : IDisposable
         _pendingKey = null;
     }
 
-    /// <summary>Re-reads state and placement, then shows, hides or redraws the widget.</summary>
-    private void Update()
+    /// <summary>
+    /// Re-reads state and placement, then shows, hides or redraws the widget. <paramref name="refresh"/> is
+    /// the periodic check for taskbar changes: it redraws only when the placement or the taskbar theme changed.
+    /// </summary>
+    private void Update(bool refresh = false)
     {
         bool enabled;
+        bool hideInFullscreen;
         NowPlaying? track;
         CanvasBitmap? cover;
         byte[]? coverFor;
         lock (_gate)
         {
             enabled = _settings.Enabled;
+            hideInFullscreen = _settings.HideInFullscreen;
             track = _track;
             cover = _cover;
             coverFor = _coverFor;
         }
-        if (!enabled || track == null || !Attach())
+        if (!enabled || track == null || !Attach() || (hideInFullscreen && FullscreenInFront()))
         {
             Hide();
             return;
@@ -338,6 +356,7 @@ public sealed class TaskbarWidget : IDisposable
         {
             _marqueeKey = key; // new track: the marquee starts over (with its pause)
             _marqueeStart = Now;
+            _marqueeResting = true;
         }
         if (!_visible)
         {
@@ -345,6 +364,9 @@ public sealed class TaskbarWidget : IDisposable
             _hoverLevel = HoverTarget();
             _dimLevel = DimTarget();
         }
+        var drawn = (_placement, _light);
+        if (refresh && _visible && drawn == _drawn && TransitionProgress >= 1) return; // nothing moved: an animation, if any, keeps drawing
+        _drawn = drawn;
         Draw(dump: true);
         SetVisible(true);
         StartAnimation();
@@ -403,6 +425,8 @@ public sealed class TaskbarWidget : IDisposable
         left = Math.Clamp(left, 0, Math.Max(0, barWidth - _view.PixelWidth));
         _light = IsLightTaskbar();
 
+        _scale = scale;
+        _placement = (left, _view.PixelWidth, _view.PixelHeight);
         SetWindowPos(_hwnd, HWND_TOP, left, 0, _view.PixelWidth, _view.PixelHeight, SWP_NOACTIVATE);
         return true;
     }
@@ -422,7 +446,7 @@ public sealed class TaskbarWidget : IDisposable
         if (track == null || _view.PixelWidth == 0) return;
 
         double t = Now - _marqueeStart;
-        bool scrolling = MarqueeActive(track, settings);
+        bool scrolling = !_marqueeResting && MarqueeActive(track, settings);
         var visual = new WidgetVisual(
             _hoverLevel,
             _dimLevel,
@@ -460,6 +484,19 @@ public sealed class TaskbarWidget : IDisposable
         settings.ScrollTitles
         && (_view.TitleWidth > _view.TextWidth + 0.5f || (_view.ShowsArtist && _view.ArtistWidth > _view.TextWidth + 0.5f));
 
+    /// <summary>
+    /// Whether the marquee moves on this frame: while playing; on pause it finishes the pass it is in
+    /// (the loop ends exactly where it started) and then rests at the start until playback resumes.
+    /// </summary>
+    private bool MarqueeRunning(NowPlaying track, TaskbarWidgetSettings settings, double now)
+    {
+        if (!MarqueeActive(track, settings)) return false;
+        if (track.IsPlaying) return true;
+        if (_marqueeResting) return false;
+        double t = now - _marqueeStart;
+        return Scroll(_view.TitleWidth, t) > 0 || (_view.ShowsArtist && Scroll(_view.ArtistWidth, t) > 0);
+    }
+
     /// <summary>Marquee offset: rest at the start, scroll one full length (plus the gap), repeat.</summary>
     private float Scroll(float width, double t)
     {
@@ -470,12 +507,17 @@ public sealed class TaskbarWidget : IDisposable
         return phase < MarqueeWait ? 0 : (float)((phase - MarqueeWait) * MarqueeSpeed);
     }
 
+    /// <summary>Starts the frame timer, or brings it back to full rate for something new to animate.</summary>
     private void StartAnimation()
     {
-        if (_animating || !_visible) return;
-        _animating = true;
-        _lastTick = Now;
-        SetTimer(_hwnd, (IntPtr)AnimationTimer, 15, IntPtr.Zero);
+        if (!_visible) return;
+        if (!_animating)
+        {
+            _animating = true;
+            _lastTick = Now;
+            _frameMs = 0;
+        }
+        SetFrameInterval(FrameMs);
     }
 
     private void StopAnimation()
@@ -485,10 +527,26 @@ public sealed class TaskbarWidget : IDisposable
         KillTimer(_hwnd, (IntPtr)AnimationTimer);
     }
 
+    // Frame pacing: ~60 fps while anything moves (a slower marquee rate stutters: timer ticks come in
+    // 15.6 ms steps); nothing is drawn while an auto-hidden taskbar is off screen, only checked for coming back.
+    private const uint FrameMs = 15, HiddenPollMs = 200;
+
+    private void SetFrameInterval(uint ms)
+    {
+        if (ms == _frameMs) return;
+        _frameMs = ms;
+        SetTimer(_hwnd, (IntPtr)AnimationTimer, ms, IntPtr.Zero);
+    }
+
     private void Tick()
     {
         double now = Now, dt = Math.Min(0.1, now - _lastTick);
         _lastTick = now;
+        if (!TaskbarOnScreen())
+        {
+            SetFrameInterval(HiddenPollMs);
+            return;
+        }
         bool settled = Ease(ref _hoverLevel, HoverTarget(), dt, 0.05) & Ease(ref _dimLevel, DimTarget(), dt, 0.09);
 
         NowPlaying? track;
@@ -498,13 +556,61 @@ public sealed class TaskbarWidget : IDisposable
             track = _shown;
             settings = _settings;
         }
-        bool scrolling = track != null && MarqueeActive(track, settings);
-        if (!scrolling) _marqueeStart = now; // resumes from the start, after its pause
+        bool scrolling = track != null && MarqueeRunning(track, settings, now);
+        if (scrolling && _marqueeResting) _marqueeStart = now; // starts over, with its pause
+        _marqueeResting = !scrolling;
 
         bool sliding = TransitionProgress < 1;
         Draw();
         if (!sliding) { _previous = null; _previousCover = null; }
         if (settled && !scrolling && !sliding) StopAnimation();
+        else SetFrameInterval(FrameMs);
+    }
+
+    /// <summary>False while an auto-hidden taskbar is slid off its monitor (a sliver of a few px stays).</summary>
+    private bool TaskbarOnScreen()
+    {
+        if (_parent == IntPtr.Zero || !GetWindowRect(_parent, out var bar)) return false;
+        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        if (!GetMonitorInfo(MonitorFromWindow(_parent, 2 /* MONITOR_DEFAULTTONEAREST */), ref info)) return true;
+        int visible = Math.Min(bar.Bottom, info.rcMonitor.Bottom) - Math.Max(bar.Top, info.rcMonitor.Top);
+        return visible > 4 * _scale;
+    }
+
+    private void OnForegroundChanged(IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)
+    {
+        try
+        {
+            Update(refresh: true);
+        }
+        catch (Exception ex)
+        {
+            Omnisound.Services.CrashLog.Write("taskbar widget", ex);
+        }
+    }
+
+    /// <summary>
+    /// A fullscreen window (video, game, F11 browser) is in front on the taskbar's monitor: it covers the
+    /// whole monitor and has no caption. Maximized windows keep theirs, which tells them apart even when
+    /// an auto-hidden taskbar lets them cover the whole monitor too.
+    /// </summary>
+    private bool FullscreenInFront()
+    {
+        var window = GetForegroundWindow();
+        if (window == IntPtr.Zero || window == GetShellWindow() || !GetWindowRect(window, out var r)) return false;
+        var name = new System.Text.StringBuilder(32);
+        GetClassName(window, name, name.Capacity);
+        if (name.ToString() is "WorkerW" or "Progman" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd") return false; // the desktop
+
+        var monitor = MonitorFromWindow(window, 2 /* MONITOR_DEFAULTTONEAREST */);
+        if (monitor != MonitorFromWindow(_parent, 2)) return false;
+        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        if (!GetMonitorInfo(monitor, ref info)) return false;
+        var m = info.rcMonitor;
+        if (r.Left > m.Left || r.Top > m.Top || r.Right < m.Right || r.Bottom < m.Bottom) return false;
+
+        const long WS_CAPTION = 0x00C00000L;
+        return (GetWindowLongPtr(window, -16 /* GWL_STYLE */).ToInt64() & WS_CAPTION) != WS_CAPTION;
     }
 
     /// <summary>Exponential ease toward <paramref name="target"/>; true once there.</summary>
@@ -598,6 +704,7 @@ public sealed class TaskbarWidget : IDisposable
     private static readonly IntPtr HWND_TOP = IntPtr.Zero;
 
     private delegate IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
+    private delegate void WinEventProc(IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint thread, uint time);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct WNDCLASSEX
@@ -624,6 +731,9 @@ public sealed class TaskbarWidget : IDisposable
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT { public int Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint dwFlags; }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT { public int X, Y; }
@@ -669,6 +779,13 @@ public sealed class TaskbarWidget : IDisposable
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string className, string? windowName);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
     [DllImport("user32.dll")] private static extern uint GetDpiForWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+    [DllImport("user32.dll")] private static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr module, WinEventProc proc, uint process, uint thread, uint flags);
+    [DllImport("user32.dll")] private static extern bool UnhookWinEvent(IntPtr hook);
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern IntPtr GetShellWindow();
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr hwnd, System.Text.StringBuilder name, int max);
+    [DllImport("user32.dll")] private static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
     [DllImport("user32.dll")] private static extern bool TrackMouseEvent(ref TRACKMOUSEEVENT tme);
     [DllImport("user32.dll")] private static extern IntPtr SetCapture(IntPtr hwnd);
     [DllImport("user32.dll")] private static extern bool ReleaseCapture();

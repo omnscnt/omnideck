@@ -63,7 +63,11 @@ public sealed partial class FlyoutWindow : Window
 
         _taskbarWatch = DispatcherQueue.CreateTimer();
         _taskbarWatch.Interval = TimeSpan.FromMilliseconds(15);
-        _taskbarWatch.Tick += (_, _) => FollowTaskbar();
+        _taskbarWatch.Tick += (_, _) =>
+        {
+            CheckFocus();
+            FollowTaskbar();
+        };
     }
 
     public bool IsOpen => _isOpen;
@@ -85,8 +89,10 @@ public sealed partial class FlyoutWindow : Window
         AppWindow.Move(Offset(_target.X, _target.Y, 1.0));
         SetCloaked(true);
         AppWindow.Show(true);
+        if (!_isOpen) _previousForeground = TaskbarPlacement.ForegroundWindow;
+        _focusAttempts = 0;
         Activate();
-        TaskbarPlacement.BringToFront(_hwnd);
+        _hasFocus = TaskbarPlacement.BringToFront(_hwnd);
         _isOpen = true;
         AppsScroller.ChangeView(null, 0, null, true);
         QueueResize(); // Item templates realize on the first layout pass; re-measure once they exist.
@@ -125,6 +131,7 @@ public sealed partial class FlyoutWindow : Window
     {
         if (!_isOpen) return;
         _isOpen = false;
+        _hasFocus = false;
         _lastHidden = DateTime.UtcNow;
         ViewModel.StopMetering();
 
@@ -329,9 +336,30 @@ public sealed partial class FlyoutWindow : Window
 
     // ---- events ------------------------------------------------------------------------------
 
+    // Focus: closing on deactivation only counts once the flyout really had the foreground. A refused
+    // SetForegroundWindow can still send activate + deactivate, which used to close it right after opening.
+    private bool _hasFocus;
+    private IntPtr _previousForeground;
+    private int _focusAttempts;
+
     private void OnActivated(object sender, WindowActivatedEventArgs args)
     {
-        if (args.WindowActivationState == WindowActivationState.Deactivated) Hide();
+        if (args.WindowActivationState != WindowActivationState.Deactivated)
+            _hasFocus |= TaskbarPlacement.ForegroundWindow == _hwnd;
+        else if (_hasFocus) Hide();
+    }
+
+    /// <summary>
+    /// While the flyout is open without the foreground: keep asking for it for a moment, and close
+    /// once the user moves on to another window (no deactivation will tell us then).
+    /// </summary>
+    private void CheckFocus()
+    {
+        if (!_isOpen || _hasFocus) return;
+        var foreground = TaskbarPlacement.ForegroundWindow;
+        if (foreground == _hwnd) _hasFocus = true;
+        else if (foreground != _previousForeground && foreground != IntPtr.Zero) Hide();
+        else if (++_focusAttempts % 6 == 0 && _focusAttempts <= 60) _hasFocus = TaskbarPlacement.BringToFront(_hwnd);
     }
 
     private void OnRootKeyDown(object sender, KeyRoutedEventArgs e)

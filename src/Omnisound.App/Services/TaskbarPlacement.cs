@@ -74,7 +74,34 @@ public static class TaskbarPlacement
         return new TaskbarAnchor(edge, work, cursor, scale);
     }
 
-    public static void BringToFront(IntPtr hwnd) => SetForegroundWindow(hwnd);
+    /// <summary>
+    /// Makes <paramref name="hwnd"/> the foreground window. A tray click gives us that right, a hotkey
+    /// from our keyboard hook does not (foreground lock): then join the foreground window's input queue
+    /// for a moment, which lets the call through.
+    /// </summary>
+    public static bool BringToFront(IntPtr hwnd)
+    {
+        if (SetForegroundWindow(hwnd) && GetForegroundWindow() == hwnd) return true;
+
+        var foreground = GetForegroundWindow();
+        uint foregroundThread = foreground != IntPtr.Zero ? GetWindowThreadProcessId(foreground, out _) : 0;
+        uint self = GetCurrentThreadId();
+        if (foregroundThread != 0 && foregroundThread != self && AttachThreadInput(self, foregroundThread, true))
+        {
+            try
+            {
+                BringWindowToTop(hwnd);
+                SetForegroundWindow(hwnd);
+            }
+            finally
+            {
+                AttachThreadInput(self, foregroundThread, false);
+            }
+        }
+        return GetForegroundWindow() == hwnd;
+    }
+
+    public static IntPtr ForegroundWindow => GetForegroundWindow();
 
     /// <summary>
     /// Puts an always-on-top window directly beneath the taskbar in z-order: still above every normal
@@ -147,6 +174,21 @@ public static class TaskbarPlacement
 
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool BringWindowToTop(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint attach, uint attachTo, bool doAttach);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr FindWindow(string className, string? windowName);
