@@ -37,8 +37,8 @@ public static class AppIconLoader
         return bitmap;
     }
 
-    /// <summary>Premultiplied BGRA pixels of the exe's main icon, or null.</summary>
-    private static byte[]? ExtractPixels(string path, int size)
+    /// <summary>Premultiplied BGRA pixels (size × size) of the exe's main icon, or null. Any thread.</summary>
+    public static byte[]? ExtractPixels(string path, int size)
     {
         if (SHDefExtractIcon(path, 0, 0, out var icon, out var small, (uint)(size | (16 << 16))) != 0 || icon == IntPtr.Zero)
             return null;

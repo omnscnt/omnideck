@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Omnisound.Core.Hotkeys;
 using Omnisound.Core.Media;
+using Omnisound.Osd;
 using Omnisound.Services;
 using Omnisound.Taskbar;
 using Omnisound.ViewModels;
@@ -38,6 +39,7 @@ public sealed partial class SettingsWindow : Window
         Nav.Loaded += (_, _) => FloatPane();
         AutoStartSwitch.IsOn = AutoStart.IsEnabled;
         LoadWidgetSettings();
+        LoadOsdSettings();
         SettingsPathText.Text = $"Settings are stored in {SettingsStore.FilePath}";
     }
 
@@ -150,6 +152,7 @@ public sealed partial class SettingsWindow : Window
         HotkeysPage.Padding = new Thickness(side, 8, side, 36);
         WidgetContent.Padding = new Thickness(side, 8, side, 36);
         GeneralContent.Padding = new Thickness(side, 8, side, 36);
+        OsdContentGrid.Padding = new Thickness(side, 8, side, 36);
     }
 
     private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -158,6 +161,7 @@ public sealed partial class SettingsWindow : Window
         HotkeysPage.Visibility = tag == "hotkeys" ? Visibility.Visible : Visibility.Collapsed;
         GeneralPage.Visibility = tag == "general" ? Visibility.Visible : Visibility.Collapsed;
         WidgetPage.Visibility = tag == "widget" ? Visibility.Visible : Visibility.Collapsed;
+        OsdPage.Visibility = tag == "osd" ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>Adds a blank hotkey above the add card; its card unfolds and starts recording (see HotkeyCard).</summary>
@@ -170,7 +174,7 @@ public sealed partial class SettingsWindow : Window
 
     private TaskbarWidgetSettings _widget = new();
     private readonly System.Collections.ObjectModel.ObservableCollection<WidgetAppItem> _widgetApps = [];
-    private bool _loadingWidget;
+    private bool _loadingWidget = true; // until LoadWidgetSettings (controls raise change events while being built)
 
     private void LoadWidgetSettings()
     {
@@ -260,6 +264,78 @@ public sealed partial class SettingsWindow : Window
         _widget.AppPaths.Remove(item.Name);
         ApplyWidget();
     }
+
+    // ---- volume indicator page -----------------------------------------------------------------------
+
+    private VolumeOsdSettings _osd = new();
+    private bool _loadingOsd = true; // until LoadOsdSettings: the slider fires ValueChanged while XAML is still being built
+
+    private void LoadOsdSettings()
+    {
+        _loadingOsd = true;
+        _osd = App.Instance.VolumeOsdSettings;
+        OsdSwitch.IsOn = _osd.Enabled;
+        UpdateOsdPicker();
+        OsdDurationSlider.Value = _osd.DurationMs / 1000.0;
+        OsdExternalSwitch.IsOn = _osd.ShowExternalChanges;
+        OsdWidthSlider.Value = _osd.Width;
+        OsdHeightSlider.Value = _osd.Height;
+        OsdWidthText.Text = _osd.Width.ToString();
+        OsdHeightText.Text = _osd.Height.ToString();
+        OsdBackingSlider.Value = _osd.Backing;
+        OsdCornerSlider.Value = _osd.CornerPercent;
+        UpdateOsdLabels();
+        OsdDurationText.Text = $"{_osd.DurationMs / 1000.0:0.#} s";
+        _loadingOsd = false;
+    }
+
+    private void OnOsdChanged(object sender, RoutedEventArgs e) => ApplyOsd();
+
+    private void OnOsdSliderChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e) => ApplyOsd();
+
+    private void ApplyOsd()
+    {
+        if (_loadingOsd) return;
+        _osd.Enabled = OsdSwitch.IsOn;
+        _osd.DurationMs = (int)Math.Round(OsdDurationSlider.Value * 1000);
+        _osd.ShowExternalChanges = OsdExternalSwitch.IsOn;
+        _osd.Width = (int)Math.Round(OsdWidthSlider.Value);
+        _osd.Height = (int)Math.Round(OsdHeightSlider.Value);
+        _osd.Backing = (int)Math.Round(OsdBackingSlider.Value);
+        _osd.CornerPercent = (int)Math.Round(OsdCornerSlider.Value);
+        UpdateOsdLabels();
+        OsdWidthText.Text = _osd.Width.ToString();
+        OsdHeightText.Text = _osd.Height.ToString();
+        OsdDurationText.Text = $"{_osd.DurationMs / 1000.0:0.#} s";
+        App.Instance.ApplyVolumeOsd(_osd);
+    }
+
+    private void UpdateOsdLabels()
+    {
+        OsdBackingText.Text = _osd.Backing > 0 ? $"+{_osd.Backing}" : _osd.Backing.ToString();
+        OsdCornerText.Text = $"{_osd.CornerPercent}%";
+    }
+
+    private void OnOsdSlotClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not string tag || !Enum.TryParse<OsdPosition>(tag, out var position)) return;
+        _osd.Position = position;
+        UpdateOsdPicker();
+        ApplyOsd();
+        App.Instance.PreviewVolumeOsd(); // show it in the new spot right away
+    }
+
+    /// <summary>The chosen spot is bright, the others dim (not the accent: it can be grey too).</summary>
+    private void UpdateOsdPicker()
+    {
+        foreach (var slot in OsdPositionPicker.Children.OfType<Button>())
+        {
+            string key = slot.Tag as string == _osd.Position.ToString() ? "OmnisoundTrackValueFill" : "OmnisoundMeterTrack";
+            slot.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[key];
+        }
+    }
+
+    private void OnOsdPreview(object sender, RoutedEventArgs e) => App.Instance.PreviewVolumeOsd();
 
     private void OnAutoStartToggled(object sender, RoutedEventArgs e)
     {

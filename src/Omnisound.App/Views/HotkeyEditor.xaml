@@ -35,6 +35,7 @@
                 <x:String>Press</x:String>
                 <x:String>Double press</x:String>
                 <x:String>Triple press</x:String>
+                <x:String>Press and hold</x:String>
             </ComboBox>
             <ComboBox x:Name="ActionBox" Grid.Column="1" HorizontalAlignment="Stretch" Header="Action" SelectionChanged="OnFieldChanged">
                 <x:String>Volume up</x:String>

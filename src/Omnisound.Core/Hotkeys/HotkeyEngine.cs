@@ -4,7 +4,7 @@ namespace Omnisound.Core.Hotkeys;
 
 /// <summary>
 /// Global hotkeys via a low-level keyboard hook on a dedicated thread. Unlike RegisterHotKey it sees
-/// key-up too, so one chord can carry press (repeating while held), double and triple-press bindings at once.
+/// key-up too, so one chord can carry press, double, triple-press and press-and-hold bindings at once.
 /// <see cref="Triggered"/> fires on the thread pool; the hook callback itself only updates state.
 /// </summary>
 public sealed class HotkeyEngine : IDisposable
@@ -166,18 +166,19 @@ public sealed class HotkeyEngine : IDisposable
     // ---- per-chord trigger state machine ---------------------------------------------------------
 
     /// <summary>
-    /// Tap counting for one chord. A press fires on key-down when nothing longer could still follow
-    /// (no double/triple on the same keys); otherwise it waits for key-up and the multi-tap window.
-    /// A press bound to a stepping action also repeats while held, like keyboard auto-repeat: past
-    /// the hold threshold it cancels the tap count and fires every repeat interval until key-up.
-    /// All members run under the engine lock.
+    /// Tap counting for one chord. A press fires on key-down when nothing else could still follow
+    /// (no double/triple or hold on the same keys); otherwise it waits for key-up and the multi-tap
+    /// window. Holding past the threshold cancels the tap count and fires the hold: a Hold binding
+    /// if there is one, else a press bound to a stepping action (like keyboard auto-repeat). Holds
+    /// on stepping actions repeat every interval until key-up. All members run under the engine lock.
     /// </summary>
     private sealed class ChordState
     {
         private readonly HotkeyEngine _engine;
         private readonly Dictionary<TriggerKind, HotkeyBinding> _byTrigger = [];
         private readonly int _maxTap;
-        private readonly HotkeyBinding? _repeat;
+        private readonly HotkeyBinding? _holdBinding; // what a long press fires, if anything
+        private readonly bool _waitForHold;           // a Hold binding exists: a press can't fire until key-up
         private int _taps;
         private bool _isDown;
         private bool _holdActive;
@@ -190,8 +191,9 @@ public sealed class HotkeyEngine : IDisposable
         {
             _engine = engine;
             foreach (var b in bindings) _byTrigger.TryAdd(b.Trigger, b); // first binding per trigger wins
-            _maxTap = _byTrigger.Keys.Select(TapCount).DefaultIfEmpty(0).Max();
-            _repeat = _byTrigger.TryGetValue(TriggerKind.Single, out var single) && single.Repeats ? single : null;
+            _maxTap = _byTrigger.Keys.Where(t => t != TriggerKind.Hold).Select(TapCount).DefaultIfEmpty(0).Max();
+            _waitForHold = _byTrigger.TryGetValue(TriggerKind.Hold, out var hold);
+            _holdBinding = hold ?? (_byTrigger.TryGetValue(TriggerKind.Single, out var single) && single.Repeats ? single : null);
             Block = bindings.Any(b => b.BlockKey);
         }
 
@@ -209,9 +211,12 @@ public sealed class HotkeyEngine : IDisposable
             DisposeTimer(ref _tapTimer);
 
             bool firstPress = _taps == 1;
-            if (_taps >= _maxTap) FireTaps(); // nothing longer is bound: no need to wait
-            if (_repeat != null && firstPress)
-                _holdTimer = new Timer(_ => OnHoldTick(), null, HoldThreshold, HoldRepeat);
+            if (!_waitForHold && _taps >= _maxTap) FireTaps(); // nothing longer is bound: no need to wait
+            if (_holdBinding != null && firstPress)
+            {
+                var repeat = _holdBinding.Repeats ? HoldRepeat : Timeout.InfiniteTimeSpan;
+                _holdTimer = new Timer(_ => OnHoldTick(), null, HoldThreshold, repeat);
+            }
         }
 
         public void OnUp()
@@ -246,7 +251,7 @@ public sealed class HotkeyEngine : IDisposable
                 _holdActive = true;
                 _taps = 0;
                 DisposeTimer(ref _tapTimer);
-                _engine.Fire(_repeat!);
+                _engine.Fire(_holdBinding!);
             }
         }
 

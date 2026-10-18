@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Omnisound.Core;
 using Omnisound.Core.Hotkeys;
 using Omnisound.Core.Media;
+using Omnisound.Osd;
 using Omnisound.Services;
 using Omnisound.Taskbar;
 using Omnisound.ViewModels;
@@ -22,6 +23,8 @@ public partial class App : Application
     private SettingsWindow? _settingsWindow;
     private NowPlayingWatcher? _nowPlaying;
     private TaskbarWidget? _widget;
+    private VolumeOsd? _osd;
+    private VolumeOsdFeed? _osdFeed;
 
     public static App Instance => (App)Current;
 
@@ -88,6 +91,10 @@ public partial class App : Application
         _widget.Configure(_settings.TaskbarWidget);
         _ = _nowPlaying.StartAsync();
 
+        _osd = new VolumeOsd();
+        _osd.Configure(_settings.VolumeOsd);
+        _osdFeed = new VolumeOsdFeed(_audio, _runner, _osd, () => _settings.VolumeOsd.ShowExternalChanges);
+
         new Thread(() =>
         {
             var signals = new WaitHandle[] { showSignal, menuSignal, settingsSignal };
@@ -110,13 +117,22 @@ public partial class App : Application
     /// <summary>Opens (or brings forward) the settings window.</summary>
     public void ShowSettings()
     {
-        if (_settingsWindow == null)
+        try
         {
-            var hotkeys = new HotkeysViewModel(_settings.Hotkeys, ApplyHotkeys, _hotkeys!, CurrentAppNames);
-            _settingsWindow = new SettingsWindow(hotkeys);
-            _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+            if (_settingsWindow == null)
+            {
+                var hotkeys = new HotkeysViewModel(_settings.Hotkeys, ApplyHotkeys, _hotkeys!, CurrentAppNames);
+                _settingsWindow = new SettingsWindow(hotkeys);
+                _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+            }
+            _settingsWindow.Activate();
         }
-        _settingsWindow.Activate();
+        catch (Exception ex)
+        {
+            // Reached from dispatcher callbacks, which UnhandledException doesn't cover: log, don't die.
+            CrashLog.Write("settings window", ex);
+            _settingsWindow = null;
+        }
     }
 
     private IEnumerable<string> CurrentAppNames() =>
@@ -160,8 +176,21 @@ public partial class App : Application
     public IEnumerable<string> MediaAppNames() =>
         (_nowPlaying?.SessionAppNames() ?? []).Concat(CurrentAppNames()).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n);
 
+    /// <summary>A copy of the volume indicator settings, for the settings window to edit.</summary>
+    public VolumeOsdSettings VolumeOsdSettings => _settings.VolumeOsd.Clone();
+
+    public void ApplyVolumeOsd(VolumeOsdSettings settings)
+    {
+        _settings.VolumeOsd = settings.Clone();
+        _osd?.Configure(settings);
+        SettingsStore.Save(_settings);
+    }
+
+    public void PreviewVolumeOsd() => _osdFeed?.Preview();
+
     private void Shutdown()
     {
+        _osd?.Dispose();
         _widget?.Dispose();
         _nowPlaying?.Dispose();
         _hotkeys?.Dispose();

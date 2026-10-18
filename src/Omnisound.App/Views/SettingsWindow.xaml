@@ -61,6 +61,11 @@
                         <FontIcon Glyph="&#xE90E;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="Volume indicator" Tag="osd">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE767;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
             <!-- General settings sit at the bottom of the pane, where Windows puts Settings. -->
             <NavigationView.FooterMenuItems>
@@ -471,6 +476,228 @@
                                 </Grid>
                             </Border>
                         </StackPanel>
+                    </StackPanel>
+                </Grid>
+                </ScrollViewer>
+
+                <!-- Volume indicator page -->
+                <ScrollViewer x:Name="OsdPage" Visibility="Collapsed">
+                <Grid x:Name="OsdContentGrid" Padding="36,8,36,36">
+                    <StackPanel Spacing="4">
+                        <TextBlock Margin="0,0,0,8" Style="{StaticResource TitleTextBlockStyle}" Text="Volume indicator" />
+                        <TextBlock
+                            Margin="0,0,0,16"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="A small, unclickable bar that shows the new volume when a hotkey changes it, for the whole device or a single app."
+                            TextWrapping="Wrap" />
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Show the volume indicator" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Appears on the screen with the mouse pointer." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="OsdSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Show the volume indicator" Toggled="OnOsdChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Position" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Where on the screen it appears. Click a spot to see it there." />
+                                </StackPanel>
+                                <!-- Position picker: the screen as a rectangle split into the six zones the indicator can take. -->
+                                <Grid
+                                    x:Name="OsdPositionPicker"
+                                    Grid.Column="1"
+                                    Width="108"
+                                    Height="60"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    ColumnSpacing="2"
+                                    RowSpacing="2">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button AutomationProperties.Name="Top left" Click="OnOsdSlotClick" Style="{StaticResource ScreenSlotButtonStyle}" Tag="TopLeft" />
+                                    <Button Grid.Column="1" AutomationProperties.Name="Top centre" Click="OnOsdSlotClick" Style="{StaticResource ScreenSlotButtonStyle}" Tag="TopCenter" />
+                                    <Button Grid.Column="2" AutomationProperties.Name="Top right" Click="OnOsdSlotClick" Style="{StaticResource ScreenSlotButtonStyle}" Tag="TopRight" />
+                                    <Button Grid.Row="1" AutomationProperties.Name="Bottom left" Click="OnOsdSlotClick" Style="{StaticResource ScreenSlotButtonStyle}" Tag="BottomLeft" />
+                                    <Button Grid.Row="1" Grid.Column="1" AutomationProperties.Name="Bottom centre" Click="OnOsdSlotClick" Style="{StaticResource ScreenSlotButtonStyle}" Tag="BottomCenter" />
+                                    <Button Grid.Row="1" Grid.Column="2" AutomationProperties.Name="Bottom right" Click="OnOsdSlotClick" Style="{StaticResource ScreenSlotButtonStyle}" Tag="BottomRight" />
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Width" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Length of the indicator; the bar takes up the extra room." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                                    <Slider x:Name="OsdWidthSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Width"
+                                        Maximum="480" Minimum="160" StepFrequency="8" ValueChanged="OnOsdSliderChanged" />
+                                    <TextBlock x:Name="OsdWidthText" Width="36" VerticalAlignment="Center" TextAlignment="Right" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Height" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="The icon, bar and number grow with it." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                                    <Slider x:Name="OsdHeightSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Height"
+                                        Maximum="72" Minimum="32" StepFrequency="2" ValueChanged="OnOsdSliderChanged" />
+                                    <TextBlock x:Name="OsdHeightText" Width="36" VerticalAlignment="Center" TextAlignment="Right" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Backing" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="How far the backing reaches past the icon, bar and number. Negative hugs them closer." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                                    <Slider x:Name="OsdBackingSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Backing"
+                                        Maximum="24" Minimum="-8" StepFrequency="1" ValueChanged="OnOsdSliderChanged" />
+                                    <TextBlock x:Name="OsdBackingText" Width="36" VerticalAlignment="Center" TextAlignment="Right" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Corner rounding" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="From square corners to a fully round pill." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                                    <Slider x:Name="OsdCornerSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Corner rounding"
+                                        Maximum="100" Minimum="0" StepFrequency="5" ValueChanged="OnOsdSliderChanged" />
+                                    <TextBlock x:Name="OsdCornerText" Width="40" VerticalAlignment="Center" TextAlignment="Right" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Duration" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="How long it stays after the last change." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                                    <Slider x:Name="OsdDurationSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Duration"
+                                        Maximum="5" Minimum="0.5" StepFrequency="0.5" ValueChanged="OnOsdSliderChanged" />
+                                    <TextBlock x:Name="OsdDurationText" Width="36" VerticalAlignment="Center" TextAlignment="Right" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Also show other changes" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Media keys, the Windows mixer and apps changing their own volume. Not the omnisound mixer: its sliders already show it." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="OsdExternalSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Also show other changes" Toggled="OnOsdChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Preview" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Shows the indicator with the current master volume." />
+                                </StackPanel>
+                                <Button Grid.Column="1" HorizontalAlignment="Right" Click="OnOsdPreview" Content="Show" />
+                            </Grid>
+                        </Border>
                     </StackPanel>
                 </Grid>
                 </ScrollViewer>

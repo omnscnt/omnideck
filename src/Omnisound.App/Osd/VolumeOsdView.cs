@@ -1,0 +1,159 @@
+using System.Numerics;
+using Microsoft.Graphics.Canvas;
+using Microsoft.Graphics.Canvas.Effects;
+using Microsoft.Graphics.Canvas.Text;
+using Windows.Foundation;
+using Windows.UI;
+
+namespace Omnisound.Osd;
+
+/// <summary>
+/// Draws the volume indicator with Win2D: a pill on a semi-transparent backing with a soft shadow,
+/// holding the app icon (or a speaker glyph that follows the level), a bar and the percentage.
+/// Output is premultiplied BGRA for a layered window; the shadow needs a margin around the pill.
+/// </summary>
+public sealed class VolumeOsdView
+{
+    // DIPs. Inner sizes are for a 48-high content box and scale with the configured height.
+    public const float ShadowMargin = 20;
+    private const float BaseHeight = 48, Pad = 16, IconSize = 22, BarGap = 10, BarHeight = 4, FontSize = 12, GlyphSize = 18;
+
+    private static readonly string TextFont = FontExists("Segoe UI Variable Text") ? "Segoe UI Variable Text" : "Segoe UI";
+    private static readonly string IconFont = FontExists("Segoe Fluent Icons") ? "Segoe Fluent Icons" : "Segoe MDL2 Assets";
+
+    private readonly CanvasDevice _device = CanvasDevice.GetSharedDevice();
+    private CanvasRenderTarget? _target;
+    private CanvasBitmap? _icon;
+    private byte[]? _iconSource;
+
+    /// <summary>The window's size for <paramref name="layout"/>: the backing plus room for its shadow.</summary>
+    public static Size SizeDip(OsdLayout layout) => new(
+        Math.Max(1, layout.Width + 2 * layout.Backing) + 2 * ShadowMargin,
+        Math.Max(1, layout.Height + 2 * layout.Backing) + 2 * ShadowMargin);
+
+    /// <param name="level">The bar's (animated) level, 0..1.</param>
+    /// <param name="opacity">The whole indicator's (animated) opacity.</param>
+    public byte[] Render(OsdContent content, OsdLayout layout, float level, float opacity, bool light, double scale, out int width, out int height)
+    {
+        var size = SizeDip(layout);
+        width = (int)Math.Ceiling(size.Width * scale);
+        height = (int)Math.Ceiling(size.Height * scale);
+        if (_target == null || _target.SizeInPixels.Width != width || _target.SizeInPixels.Height != height)
+        {
+            _target?.Dispose();
+            _target = new CanvasRenderTarget(_device, width, height, 96);
+        }
+        UpdateIcon(content);
+
+        float k = layout.Height / BaseHeight;
+        float pad = Pad * k, iconSize = IconSize * k, barHeight = Math.Max(3, BarHeight * k);
+        var fore = light ? Color.FromArgb(255, 0x1C, 0x1C, 0x1C) : Color.FromArgb(255, 255, 255, 255);
+        Color Fore(double alpha) => Color.FromArgb((byte)(alpha * 255), fore.R, fore.G, fore.B);
+
+        // The content box holds icon, bar and number; the backing extends past it by Backing on every side.
+        var box = new Rect(ShadowMargin + layout.Backing, ShadowMargin + layout.Backing, layout.Width, layout.Height);
+        var backing = new Rect(ShadowMargin, ShadowMargin, size.Width - 2 * ShadowMargin, size.Height - 2 * ShadowMargin);
+        float radius = (float)(Math.Clamp(layout.CornerPercent, 0, 100) / 100 * Math.Min(backing.Width, backing.Height) / 2);
+
+        using var format = new CanvasTextFormat
+        {
+            FontFamily = TextFont, FontSize = FontSize * k,
+            VerticalAlignment = CanvasVerticalAlignment.Center, WordWrapping = CanvasWordWrapping.NoWrap,
+        };
+        // The number column is exactly as wide as "100", so the bar never changes length with the value.
+        float numberWidth;
+        using (var widest = new CanvasTextLayout(_device, "100", format, 1000, 100)) numberWidth = (float)Math.Ceiling(widest.LayoutBounds.Width);
+
+        using (var ds = _target.CreateDrawingSession())
+        {
+            ds.Clear(Color.FromArgb(0, 0, 0, 0));
+            ds.Transform = Matrix3x2.CreateScale((float)scale);
+            ds.TextAntialiasing = CanvasTextAntialiasing.Grayscale; // no ClearType on a transparent surface
+
+            using (ds.CreateLayer(opacity))
+            {
+                // Soft shadow: the backing's shape, blurred, a little lower.
+                using (var shape = new CanvasCommandList(_device))
+                {
+                    using (var s = shape.CreateDrawingSession())
+                        s.FillRoundedRectangle(backing, radius, radius, Color.FromArgb(255, 0, 0, 0));
+                    var shadow = new ShadowEffect { Source = shape, BlurAmount = 8, ShadowColor = Color.FromArgb(light ? (byte)50 : (byte)110, 0, 0, 0) };
+                    ds.DrawImage(shadow, 0, 3);
+                }
+
+                // Semi-transparent backing with a hairline edge.
+                ds.FillRoundedRectangle(backing, radius, radius, light ? Color.FromArgb(0xE8, 0xF7, 0xF7, 0xF7) : Color.FromArgb(0xE0, 0x24, 0x24, 0x24));
+                float edge = Math.Max(0, radius - 0.5f);
+                ds.DrawRoundedRectangle(Inflate(backing, -0.5f), edge, edge, light ? Color.FromArgb(0x1A, 0, 0, 0) : Color.FromArgb(0x24, 255, 255, 255), 1);
+
+                // Icon: the app's own, or a speaker that shows the level.
+                // The speaker is laid out by its ink (the widest variant, so the bar doesn't move with the level).
+                float iconWidth = _icon != null ? iconSize : SpeakerInkWidth(GlyphSize * k);
+                var iconRect = new Rect(box.X + pad, box.Y + (box.Height - iconSize) / 2, iconWidth, iconSize);
+                if (_icon != null)
+                    ds.DrawImage(_icon, iconRect, _icon.Bounds, content.Muted ? 0.4f : 1f, CanvasImageInterpolation.HighQualityCubic);
+                else
+                    DrawGlyph(ds, SpeakerGlyph(content), iconRect, GlyphSize * k, Fore(1), scale, alignLeft: true);
+                if (_icon != null && content.Muted)
+                    DrawGlyph(ds, "", new Rect(iconRect.Right - 9 * k, iconRect.Bottom - 9 * k, 12 * k, 12 * k), 11 * k, Fore(1), scale); // mute badge
+
+                // Bar, then the number right after it.
+                float numberLeft = (float)(box.Right - pad - numberWidth);
+                float barLeft = (float)iconRect.Right + BarGap * k;
+                float barRight = numberLeft - BarGap * k;
+                float barY = (float)(box.Y + (box.Height - barHeight) / 2);
+                var track = new Rect(barLeft, barY, Math.Max(0, barRight - barLeft), barHeight);
+                ds.FillRoundedRectangle(track, barHeight / 2, barHeight / 2, Fore(light ? 0.18 : 0.22));
+                float fill = Math.Clamp(level, 0, 1) * (float)track.Width;
+                if (fill > 0.5f)
+                    ds.FillRoundedRectangle(new Rect(barLeft, barY, Math.Max(fill, barHeight), barHeight), barHeight / 2, barHeight / 2, Fore(content.Muted ? 0.35 : 1));
+
+                ds.DrawText($"{(int)Math.Round(content.Volume * 100)}", new Rect(numberLeft, box.Y, numberWidth + 2, box.Height),
+                    Fore(content.Muted ? 0.45 : 0.85), format);
+            }
+        }
+        return _target.GetPixelBytes();
+    }
+
+    private static string SpeakerGlyph(OsdContent content) =>
+        content.Muted ? ""
+        : content.Volume <= 0.001f ? ""
+        : content.Volume < 0.34f ? ""
+        : content.Volume < 0.67f ? ""
+        : "";
+
+    private void UpdateIcon(OsdContent content)
+    {
+        if (ReferenceEquals(content.Icon, _iconSource)) return;
+        _iconSource = content.Icon;
+        _icon?.Dispose();
+        _icon = content.Icon == null ? null
+            : CanvasBitmap.CreateFromBytes(_device, content.Icon, content.IconSize, content.IconSize,
+                Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized, 96, CanvasAlphaMode.Premultiplied);
+    }
+
+    private float SpeakerInkWidth(float size)
+    {
+        using var format = new CanvasTextFormat { FontFamily = IconFont, FontSize = size, WordWrapping = CanvasWordWrapping.NoWrap };
+        using var layout = new CanvasTextLayout(_device, "", format, 100, 100); // full volume: the most waves
+        return (float)layout.DrawBounds.Width;
+    }
+
+    private void DrawGlyph(CanvasDrawingSession ds, string glyph, Rect rect, float size, Color color, double scale, bool alignLeft = false)
+    {
+        using var format = new CanvasTextFormat { FontFamily = IconFont, FontSize = size, WordWrapping = CanvasWordWrapping.NoWrap };
+        using var layout = new CanvasTextLayout(_device, glyph, format, 100, 100);
+        var ink = layout.DrawBounds;
+        // Centre (or left-align) the ink, snapped to device pixels so the glyph stays crisp.
+        float x = Snap((float)(rect.X + (alignLeft ? 0 : (rect.Width - ink.Width) / 2) - ink.X), scale);
+        float y = Snap((float)(rect.Y + (rect.Height - ink.Height) / 2 - ink.Y), scale);
+        ds.DrawTextLayout(layout, x, y, color);
+    }
+
+    private static float Snap(float dip, double scale) => (float)(Math.Round(dip * scale) / scale);
+
+    private static Rect Inflate(Rect r, float by) => new(r.X - by, r.Y - by, r.Width + 2 * by, r.Height + 2 * by);
+
+    private static bool FontExists(string family) =>
+        new System.Drawing.Text.InstalledFontCollection().Families.Any(f => f.Name == family);
+}

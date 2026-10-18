@@ -90,6 +90,7 @@ public sealed partial class HotkeyItemViewModel : ObservableObject
         {
             TriggerKind.Double => "Double press",
             TriggerKind.Triple => "Triple press",
+            TriggerKind.Hold => b.Repeats ? "Hold (repeats)" : "Hold",
             _ => b.Repeats ? "Press or hold" : "Press",
         };
         string action = b.Action switch

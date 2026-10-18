@@ -8,7 +8,7 @@ public enum TriggerKind
     Single,
     Double,
     Triple,
-    /// <summary>Legacy: merged into <see cref="Single"/> (a held press repeats). Read from old settings only.</summary>
+    /// <summary>Fires once the key has been held past the threshold (repeating for stepping actions); a short tap does nothing.</summary>
     Hold,
 }
 
@@ -43,14 +43,7 @@ public sealed class HotkeyBinding
     public Guid Id { get; set; } = Guid.NewGuid();
     public bool Enabled { get; set; } = true;
     public KeyChord Keys { get; set; }
-    private TriggerKind _trigger = TriggerKind.Single;
-
-    /// <summary>A single press also repeats while held (for stepping actions), so Hold maps to it.</summary>
-    public TriggerKind Trigger
-    {
-        get => _trigger;
-        set => _trigger = value == TriggerKind.Hold ? TriggerKind.Single : value;
-    }
+    public TriggerKind Trigger { get; set; } = TriggerKind.Single;
     public HotkeyAction Action { get; set; } = HotkeyAction.VolumeUp;
     public HotkeyTarget Target { get; set; } = HotkeyTarget.Master;
 
