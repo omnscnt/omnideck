@@ -14,8 +14,16 @@
         </Grid.RowDefinitions>
 
         <!-- Custom title bar (content extends into it) -->
-        <Grid x:Name="TitleBar" Height="40" Padding="16,0,0,0">
-            <TextBlock VerticalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}" Text="omnisound. Settings" />
+        <Grid x:Name="TitleBar" Height="32" Padding="8,0,0,0">
+            <!-- Wordmark in Outfit Bold (bundled, OFL: Assets/Fonts), level with the caption buttons. -->
+            <TextBlock
+                Margin="0,4,0,0"
+                VerticalAlignment="Top"
+                FontFamily="ms-appx:///Assets/Fonts/Outfit.ttf#Outfit"
+                FontSize="18"
+                FontWeight="Bold"
+                Foreground="{ThemeResource OmnisoundTitleForeground}"
+                Text="omnisound." />
         </Grid>
 
         <NavigationView

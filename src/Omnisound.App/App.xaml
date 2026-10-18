@@ -20,6 +20,7 @@
                     <SolidColorBrush x:Key="OmnisoundMeterTrack" Color="#1FFFFFFF" />
                     <SolidColorBrush x:Key="OmnisoundPaneStroke" Color="#1AFFFFFF" />
                     <SolidColorBrush x:Key="OmnisoundDashStroke" Color="#5CFFFFFF" />
+                    <SolidColorBrush x:Key="OmnisoundTitleForeground" Color="#FFC8C8C8" />
                     <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#FFBEBEBE" />
                     <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#FF9E9E9E" />
                 </ResourceDictionary>
@@ -31,6 +32,7 @@
                     <SolidColorBrush x:Key="OmnisoundMeterTrack" Color="#14000000" />
                     <SolidColorBrush x:Key="OmnisoundPaneStroke" Color="#14000000" />
                     <SolidColorBrush x:Key="OmnisoundDashStroke" Color="#5C000000" />
+                    <SolidColorBrush x:Key="OmnisoundTitleForeground" Color="#FF5C5C5C" />
                     <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#FF4C4C4C" />
                     <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#FF6C6C6C" />
                 </ResourceDictionary>
