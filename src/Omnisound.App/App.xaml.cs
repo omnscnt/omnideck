@@ -113,6 +113,7 @@ public partial class App : Application
         bool updated = cmdArgs.Contains(Updater.UpdatedArgument);
         bool fromAutostart = cmdArgs.Contains(AutoStart.LaunchArgument) || updated;
         if (updated) _tray.Notify("omnisound. updated", $"Version {Updater.CurrentText} is installed.");
+        if (updated) _ = Task.Run(InstallLayout.RemoveFlatLeftovers); // first start after leaving the flat layout
         StartUpdateChecks(dispatcher);
         if (!fromAutostart) _flyout.Show(); // Manual launch: show that we're alive.
         else _flyout.Prewarm(); // tray-only start: warm the window up so the first open is clean

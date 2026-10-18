@@ -7,6 +7,8 @@
 1. Скачайте `omnisound-<версия>-win-x64.zip` со страницы [Releases](../../releases) и распакуйте в любую папку
    (например `%LOCALAPPDATA%\Programs\omnisound`).
 2. Запустите `omnisound.exe` — иконка появится в трее. Автозапуск включается в Settings → General.
+   В папке только `omnisound.exe` (запускает программу) и `app\` (сама программа). Обновления ставятся из
+   Settings → General.
 
 Сборка самодостаточная: .NET и Windows App SDK внутри, ничего доустанавливать не нужно. Windows 10 1809+ / 11, x64.
 Собрать самому: `powershell -ExecutionPolicy Bypass -File tools/publish.ps1` (результат в `artifacts\`).

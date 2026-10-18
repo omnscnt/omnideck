@@ -108,7 +108,7 @@ public static class Updater
 
         string script = Path.Combine(work, "apply.ps1");
         await File.WriteAllTextAsync(script, SwapScript, cancel);
-        string target = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+        string target = InstallLayout.Root;
         Process.Start(new ProcessStartInfo
         {
             FileName = "powershell.exe",
@@ -119,13 +119,20 @@ public static class Updater
         });
     }
 
-    // Waits for omnisound to exit, copies the new files over the old ones (robocopy retries files still
-    // locked for a moment), starts the result — the new version, or the old one if copying failed — and
-    // cleans up. Extra files of older versions stay: the install folder may be shared.
+    // Waits for omnisound to exit and puts the new files in place (robocopy retries files still locked for
+    // a moment). A package with the launcher layout mirrors app\ exactly, so files a version no longer ships
+    // go away, and replaces the launcher; anything else in the install folder is left alone. Then it starts
+    // the result (the new version, or the old one if copying failed) and cleans up.
     private const string SwapScript = """
         param([int]$ProcessId, [string]$Source, [string]$Target, [string]$Work)
         try { Wait-Process -Id $ProcessId -Timeout 60 -ErrorAction Stop } catch { }
-        robocopy "$Source" "$Target" /E /R:20 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+        if (Test-Path -LiteralPath (Join-Path $Source 'app')) {
+            robocopy (Join-Path $Source 'app') (Join-Path $Target 'app') /MIR /R:20 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+            Copy-Item -LiteralPath (Join-Path $Source 'omnisound.exe') -Destination (Join-Path $Target 'omnisound.exe') -Force
+        }
+        else {
+            robocopy "$Source" "$Target" /E /R:20 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+        }
         Start-Process -FilePath (Join-Path $Target 'omnisound.exe') -ArgumentList '--updated'
         Start-Sleep -Seconds 3
         Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue

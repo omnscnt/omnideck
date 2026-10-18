@@ -10,15 +10,17 @@ public static class AutoStart
     private const string LegacyValueName = "SoundDeck"; // before the rename
     public const string LaunchArgument = "--autostart";
 
-    private static string Command => $"\"{Environment.ProcessPath}\" {LaunchArgument}";
+    private static string Command => $"\"{InstallLayout.LaunchExe}\" {LaunchArgument}";
 
     public static bool IsEnabled
     {
         get
         {
             using var key = Registry.CurrentUser.OpenSubKey(RunKey);
+            // Either this exe or the launcher in front of it.
             return new[] { ValueName, LegacyValueName }.Any(name => key?.GetValue(name) is string value
-                && value.Contains(Environment.ProcessPath ?? "", StringComparison.OrdinalIgnoreCase));
+                && (value.Contains(InstallLayout.LaunchExe, StringComparison.OrdinalIgnoreCase)
+                    || value.Contains(Environment.ProcessPath ?? "", StringComparison.OrdinalIgnoreCase)));
         }
     }
 
