@@ -52,20 +52,56 @@ public static class SettingsStore
         Converters = { new JsonStringEnumConverter() },
     };
 
+    /// <summary>The previous settings.json, kept by every save: the fallback when the file can't be read.</summary>
+    private static string BackupPath => FilePath + ".bak";
+
     public static AppSettings Load()
     {
         MigrateLegacyFolder();
+        if (!File.Exists(FilePath))
+        {
+            if (!File.Exists(BackupPath)) return new AppSettings(); // first run
+            CrashLog.Write("settings load", new FileNotFoundException("settings.json is missing; using the backup", FilePath));
+            return TryRead(BackupPath) ?? new AppSettings();
+        }
+
+        Exception? error = null;
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath), Options) ?? new AppSettings();
+            }
+            catch (IOException ex)
+            {
+                error = ex; // held open for a moment (antivirus scan, an exiting instance): try again shortly
+                Thread.Sleep(100);
+            }
+            catch (Exception ex)
+            {
+                error = ex;
+                break;
+            }
+        }
+
+        // Unreadable: log it, keep a copy for inspection, and fall back to the last good version rather than
+        // starting empty (an empty start would be saved over the user's settings on the next change).
+        CrashLog.Write("settings load", error);
+        try { File.Copy(FilePath, FilePath + ".broken", overwrite: true); } catch { }
+        return TryRead(BackupPath) ?? new AppSettings();
+    }
+
+    private static AppSettings? TryRead(string path)
+    {
         try
         {
-            if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath), Options) ?? new AppSettings();
+            return File.Exists(path) ? JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), Options) : null;
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        catch (Exception ex)
         {
-            // Unreadable settings: keep a copy for inspection and start clean rather than failing to launch.
-            try { File.Copy(FilePath, FilePath + ".broken", overwrite: true); } catch { }
+            CrashLog.Write("settings backup", ex);
+            return null;
         }
-        return new AppSettings();
     }
 
     public static void Save(AppSettings settings)
@@ -73,6 +109,7 @@ public static class SettingsStore
         Directory.CreateDirectory(Folder);
         var temp = FilePath + ".tmp";
         File.WriteAllText(temp, JsonSerializer.Serialize(settings, Options));
+        try { if (File.Exists(FilePath)) File.Copy(FilePath, BackupPath, overwrite: true); } catch (IOException) { }
         File.Move(temp, FilePath, overwrite: true); // atomic replace: never leaves a half-written file
     }
 }

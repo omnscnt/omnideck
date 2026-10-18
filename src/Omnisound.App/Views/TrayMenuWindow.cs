@@ -56,7 +56,7 @@ public sealed class TrayMenuWindow : Window
         var presenterStyle = new Style(typeof(MenuFlyoutPresenter));
         presenterStyle.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(Microsoft.UI.Colors.Transparent)));
         _menu.MenuFlyoutPresenterStyle = presenterStyle;
-        _menu.Closed += (_, _) => AppWindow.Hide();
+        _menu.Closed += (_, _) => AppWindow?.Hide(); // null once the app is exiting (menu "Exit" closes the window first)
     }
 
     public void ShowAtCursor()
