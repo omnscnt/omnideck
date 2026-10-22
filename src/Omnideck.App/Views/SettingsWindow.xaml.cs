@@ -557,26 +557,49 @@ public sealed partial class SettingsWindow : Window
 
     private bool _syncingLight;
 
-    private void ShowLockLight()
+    private void ShowLockLight(bool fromSpectrum = false)
     {
         var color = VolumeOsdSettings.ParseColor(_osd.LockLightColor) ?? VolumeOsdSettings.ParseColor(VolumeOsdSettings.DefaultLockLight)!.Value;
         _syncingLight = true;
         LockLightBox.Text = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
-        LockLightSwatch.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(color);
-        LockLightPicker.Color = color;
+        LockLightFill.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(color);
+        if (!fromSpectrum) // while dragging in the box, the box already has the colour (and its hue at zero brightness)
+        {
+            var hsv = ToHsv(color);
+            LockLightSpectrum.HsvColor = hsv;
+            LockLightBrightness.Value = Math.Round(hsv.Z * 100);
+        }
         _syncingLight = false;
     }
 
-    private void SetLockLight(Windows.UI.Color color)
+    private void SetLockLight(Windows.UI.Color color, bool fromSpectrum = false)
     {
         _osd.LockLightColor = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
-        ShowLockLight();
+        ShowLockLight(fromSpectrum);
         ApplyOsd();
     }
 
-    private void OnLockLightPicked(ColorPicker sender, ColorChangedEventArgs args)
+    private void OnLockLightPicked(Microsoft.UI.Xaml.Controls.Primitives.ColorSpectrum sender, ColorChangedEventArgs args)
     {
-        if (!_syncingLight) SetLockLight(args.NewColor);
+        if (!_syncingLight) SetLockLight(args.NewColor, fromSpectrum: true);
+    }
+
+    /// <summary>The slider sets the brightness the box leaves out; the box keeps its hue and saturation.</summary>
+    private void OnLockLightBrightness(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (_syncingLight) return;
+        var hsv = LockLightSpectrum.HsvColor;
+        LockLightSpectrum.HsvColor = new System.Numerics.Vector4(hsv.X, hsv.Y, (float)(e.NewValue / 100), 1);
+    }
+
+    /// <summary>RGB to (hue 0–360, saturation 0–1, value 0–1, alpha 1), as ColorSpectrum takes it.</summary>
+    private static System.Numerics.Vector4 ToHsv(Windows.UI.Color c)
+    {
+        float r = c.R / 255f, g = c.G / 255f, b = c.B / 255f;
+        float max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b)), d = max - min;
+        float h = d == 0 ? 0 : max == r ? 60 * (((g - b) / d) % 6) : max == g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
+        if (h < 0) h += 360;
+        return new System.Numerics.Vector4(h, max == 0 ? 0 : d / max, max, 1);
     }
 
     private void OnLockLightKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)

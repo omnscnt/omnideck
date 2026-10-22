@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="using:Omnideck.ViewModels"
     xmlns:views="using:Omnideck.Views"
+    xmlns:controlsPrimitives="using:Microsoft.UI.Xaml.Controls.Primitives"
     Title="omnideck. Settings">
 
     <Grid>
@@ -852,20 +853,39 @@
                                         MaxLength="7" />
                                     <Button
                                         x:Name="LockLightSwatch"
-                                        Width="32"
+                                        Width="48"
                                         Height="32"
-                                        Padding="0"
-                                        AutomationProperties.Name="Pick the light colour"
-                                        CornerRadius="16">
+                                        Padding="3"
+                                        HorizontalContentAlignment="Stretch"
+                                        VerticalContentAlignment="Stretch"
+                                        AutomationProperties.Name="Pick the light colour">
+                                        <!-- The colour itself; the button's own surface stays a thin frame around it. -->
+                                        <Border x:Name="LockLightFill" CornerRadius="3" />
                                         <Button.Flyout>
                                             <Flyout Placement="BottomEdgeAlignedRight">
-                                                <ColorPicker
-                                                    x:Name="LockLightPicker"
-                                                    ColorChanged="OnLockLightPicked"
-                                                    IsAlphaEnabled="False"
-                                                    IsColorChannelTextInputVisible="False"
-                                                    IsHexInputVisible="False"
-                                                    IsMoreButtonVisible="False" />
+                                                <Flyout.FlyoutPresenterStyle>
+                                                    <Style TargetType="FlyoutPresenter">
+                                                        <Setter Property="Padding" Value="12" />
+                                                        <Setter Property="BorderThickness" Value="1" />
+                                                        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                                                    </Style>
+                                                </Flyout.FlyoutPresenterStyle>
+                                                <!-- Hue and saturation in the box, brightness on the slider. -->
+                                                <StackPanel Width="200" Spacing="10">
+                                                    <controlsPrimitives:ColorSpectrum
+                                                        x:Name="LockLightSpectrum"
+                                                        Height="200"
+                                                        ColorChanged="OnLockLightPicked"
+                                                        Components="HueSaturation"
+                                                        CornerRadius="4"
+                                                        Shape="Box" />
+                                                    <Slider
+                                                        x:Name="LockLightBrightness"
+                                                        AutomationProperties.Name="Brightness"
+                                                        Maximum="100"
+                                                        Minimum="0"
+                                                        ValueChanged="OnLockLightBrightness" />
+                                                </StackPanel>
                                             </Flyout>
                                         </Button.Flyout>
                                     </Button>
