@@ -19,11 +19,16 @@ public sealed class AudioService : IDisposable
     private readonly Timer _reaper;
     private IAudioSessionManager2? _sessionManager;
     private MasterVolume? _master;
+    private MasterVolume? _microphone;
+    private int _micRebuildPending;
     private int _rebuildPending;
     private bool _disposed;
 
     /// <summary>The default output device changed (or appeared / disappeared). Master and Apps were rebuilt.</summary>
     public event EventHandler? DeviceChanged;
+
+    /// <summary>The default recording device changed (or appeared / disappeared); <see cref="Microphone"/> was rebuilt.</summary>
+    public event EventHandler? MicrophoneChanged;
 
     public event EventHandler<AudioApp>? AppAdded;
     public event EventHandler<AudioApp>? AppRemoved;
@@ -35,12 +40,19 @@ public sealed class AudioService : IDisposable
         _sessionNotifications = new SessionNotifications(this);
         _enumerator.RegisterEndpointNotificationCallback(_deviceNotifications);
         AttachToDefaultDevice();
+        AttachMicrophone();
         _reaper = new Timer(_ => ReapDeadProcesses(), null, TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(1.5));
     }
 
     public MasterVolume? Master
     {
         get { lock (_gate) return _master; }
+    }
+
+    /// <summary>The default recording device's volume and mute; null when there is none.</summary>
+    public MasterVolume? Microphone
+    {
+        get { lock (_gate) return _microphone; }
     }
 
     public IReadOnlyList<AudioApp> Apps
@@ -186,6 +198,41 @@ public sealed class AudioService : IDisposable
         }
     }
 
+    /// <summary>The default recording device (console role: what apps record from unless told otherwise).</summary>
+    private void AttachMicrophone()
+    {
+        MasterVolume? microphone = null;
+        try
+        {
+            if (_enumerator.GetDefaultAudioEndpoint(EDataFlow.Capture, ERole.Console, out var device) == 0 && device != null)
+            {
+                device.GetId(out var deviceId);
+                microphone = new MasterVolume(device, deviceId, ReadFriendlyName(device) ?? "Microphone");
+                Marshal.ReleaseComObject(device);
+            }
+        }
+        catch (COMException) { }
+        MasterVolume? old;
+        lock (_gate)
+        {
+            old = _microphone;
+            _microphone = microphone;
+        }
+        old?.Dispose();
+    }
+
+    private void ScheduleMicrophoneRebuild()
+    {
+        if (Interlocked.Exchange(ref _micRebuildPending, 1) == 1) return;
+        Task.Delay(150).ContinueWith(_ =>
+        {
+            Interlocked.Exchange(ref _micRebuildPending, 0);
+            if (_disposed) return;
+            AttachMicrophone();
+            MicrophoneChanged?.Invoke(this, EventArgs.Empty);
+        }, TaskScheduler.Default);
+    }
+
     private void ScheduleRebuild()
     {
         // Device callbacks must not call back into the enumerator; hop off the notification thread and coalesce bursts.
@@ -295,6 +342,7 @@ public sealed class AudioService : IDisposable
         _reaper.Dispose();
         try { _enumerator.UnregisterEndpointNotificationCallback(_deviceNotifications); } catch (COMException) { }
         DetachFromDevice();
+        Microphone?.Dispose();
         Marshal.ReleaseComObject(_enumerator);
     }
 
@@ -325,6 +373,7 @@ public sealed class AudioService : IDisposable
         public int OnDefaultDeviceChanged(EDataFlow flow, ERole role, string? defaultDeviceId)
         {
             if (flow == EDataFlow.Render && role == ERole.Multimedia) owner.ScheduleRebuild();
+            else if (flow == EDataFlow.Capture && role == ERole.Console) owner.ScheduleMicrophoneRebuild();
             return 0;
         }
     }

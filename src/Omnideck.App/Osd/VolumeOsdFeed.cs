@@ -17,19 +17,19 @@ public sealed class VolumeOsdFeed
 
     private readonly AudioService _audio;
     private readonly VolumeOsd _osd;
-    private readonly Func<bool> _showExternal;
+    private readonly Func<VolumeOsdSettings> _settings;
     private readonly object _gate = new();
     private readonly HashSet<AudioApp> _watchedApps = [];
     private readonly ConcurrentDictionary<string, byte[]?> _icons = new(StringComparer.OrdinalIgnoreCase);
     private MasterVolume? _watchedMaster;
 
-    public VolumeOsdFeed(AudioService audio, HotkeyActionRunner runner, VolumeOsd osd, Func<bool> showExternal)
+    public VolumeOsdFeed(AudioService audio, HotkeyActionRunner runner, VolumeOsd osd, Func<VolumeOsdSettings> settings)
     {
         _audio = audio;
         _osd = osd;
-        _showExternal = showExternal;
+        _settings = settings;
 
-        runner.VolumeChanged += (_, target) => _osd.Show(ContentFor(target));
+        runner.VolumeChanged += (_, target) => { if (_settings().Enabled) _osd.Show(ContentFor(target)); };
         audio.AppAdded += (_, app) => Watch(app);
         audio.AppRemoved += (_, app) => { lock (_gate) _watchedApps.Remove(app); };
         audio.DeviceChanged += (_, _) => WatchAll(); // a new device brings a new master and new app objects
@@ -66,7 +66,8 @@ public sealed class VolumeOsdFeed
 
     private void OnExternalChange(IVolumeControl target, VolumeChangedEventArgs e)
     {
-        if (e.Context == VolumeViewModelBase.UiContext || !_showExternal()) return;
+        var settings = _settings();
+        if (e.Context == VolumeViewModelBase.UiContext || !settings.Enabled || !settings.ShowExternalChanges) return;
         _osd.Show(ContentFor(target));
     }
 

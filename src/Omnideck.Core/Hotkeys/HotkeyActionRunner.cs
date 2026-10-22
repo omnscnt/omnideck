@@ -11,6 +11,9 @@ public sealed class HotkeyActionRunner(AudioService audio, MediaSessionService m
     /// <summary>Raised after a volume action, with the control that changed (for an on-screen indicator).</summary>
     public event Action<HotkeyBinding, IVolumeControl>? VolumeChanged;
 
+    /// <summary>Raised after the microphone was muted or unmuted by a hotkey.</summary>
+    public event Action<MasterVolume>? MicrophoneToggled;
+
     public async Task RunAsync(HotkeyBinding binding)
     {
         if (binding.IsAppAction) return; // e.g. Open mixer: handled by the app
@@ -18,7 +21,8 @@ public sealed class HotkeyActionRunner(AudioService audio, MediaSessionService m
         await _serial.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (binding.IsVolumeAction) await RunVolumeAsync(binding).ConfigureAwait(false);
+            if (binding.Action == HotkeyAction.ToggleMicMute) ToggleMicrophone();
+            else if (binding.IsVolumeAction) await RunVolumeAsync(binding).ConfigureAwait(false);
             else await RunMediaAsync(binding).ConfigureAwait(false);
         }
         catch (COMException)
@@ -29,6 +33,13 @@ public sealed class HotkeyActionRunner(AudioService audio, MediaSessionService m
         {
             _serial.Release();
         }
+    }
+
+    private void ToggleMicrophone()
+    {
+        if (audio.Microphone is not { } microphone) return;
+        microphone.ToggleMute();
+        MicrophoneToggled?.Invoke(microphone);
     }
 
     private async Task RunVolumeAsync(HotkeyBinding binding)

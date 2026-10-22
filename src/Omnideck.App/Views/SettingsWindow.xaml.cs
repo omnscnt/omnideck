@@ -542,6 +542,10 @@ public sealed partial class SettingsWindow : Window
         _loadingOsd = true;
         _osd = App.Instance.VolumeOsdSettings;
         OsdSwitch.IsOn = _osd.Enabled;
+        OsdMicSwitch.IsOn = _osd.ShowMicrophone;
+        OsdLocksSwitch.IsOn = _osd.ShowLockKeys;
+        OsdLayoutSwitch.IsOn = _osd.ShowKeyboardLayout;
+        OsdDeviceSwitch.IsOn = _osd.ShowOutputDevice;
         UpdateOsdPicker();
         OsdDurationSlider.Value = _osd.DurationMs / 1000.0;
         OsdExternalSwitch.IsOn = _osd.ShowExternalChanges;
@@ -565,6 +569,10 @@ public sealed partial class SettingsWindow : Window
     {
         if (_loadingOsd) return;
         _osd.Enabled = OsdSwitch.IsOn;
+        _osd.ShowMicrophone = OsdMicSwitch.IsOn;
+        _osd.ShowLockKeys = OsdLocksSwitch.IsOn;
+        _osd.ShowKeyboardLayout = OsdLayoutSwitch.IsOn;
+        _osd.ShowOutputDevice = OsdDeviceSwitch.IsOn;
         _osd.DurationMs = (int)Math.Round(OsdDurationSlider.Value * 1000);
         _osd.ShowExternalChanges = OsdExternalSwitch.IsOn;
         _osd.Width = (int)Math.Round(OsdWidthSlider.Value);

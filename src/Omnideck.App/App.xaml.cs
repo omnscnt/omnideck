@@ -25,6 +25,7 @@ public partial class App : Application
     private TaskbarWidget? _widget;
     private VolumeOsd? _osd;
     private VolumeOsdFeed? _osdFeed;
+    private OsdNoticeFeed? _notices;
     private Timer? _updateTimer;
 
     public static App Instance => (App)Current;
@@ -96,7 +97,8 @@ public partial class App : Application
 
         _osd = new VolumeOsd();
         _osd.Configure(_settings.VolumeOsd);
-        _osdFeed = new VolumeOsdFeed(_audio, _runner, _osd, () => _settings.VolumeOsd.ShowExternalChanges);
+        _osdFeed = new VolumeOsdFeed(_audio, _runner, _osd, () => _settings.VolumeOsd);
+        _notices = new OsdNoticeFeed(_audio, _hotkeys, _osd, () => _settings.VolumeOsd);
 
         new Thread(() =>
         {

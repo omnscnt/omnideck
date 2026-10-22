@@ -103,15 +103,15 @@ public sealed partial class HotkeyEditor : UserControl
         RecordIcon.Glyph = _recording ? "" : ""; // record dot / keyboard
 
         StepBox.Visibility = _draft.Repeats ? Visibility.Visible : Visibility.Collapsed;
-        TargetBox.Visibility = _draft.IsAppAction ? Visibility.Collapsed : Visibility.Visible;
-        AppBox.Visibility = !_draft.IsAppAction && _draft.Target == HotkeyTarget.App ? Visibility.Visible : Visibility.Collapsed;
+        TargetBox.Visibility = !_draft.HasTarget ? Visibility.Collapsed : Visibility.Visible;
+        AppBox.Visibility = _draft.HasTarget && _draft.Target == HotkeyTarget.App ? Visibility.Visible : Visibility.Collapsed;
         // Keep the app picker in its column when the step box is hidden, and drop the row when both are.
         ExtraRow.Visibility = StepBox.Visibility == Visibility.Visible || AppBox.Visibility == Visibility.Visible
             ? Visibility.Visible : Visibility.Collapsed;
 
         var conflict = _draft.Keys.IsEmpty ? null : _item.Owner.FindConflict(_draft);
-        bool appMissing = !_draft.IsAppAction && _draft.Target == HotkeyTarget.App && string.IsNullOrEmpty(_draft.AppName);
-        bool othersNeedVolume = !_draft.IsAppAction && _draft.Target == HotkeyTarget.AllExceptActive && !_draft.IsVolumeAction;
+        bool appMissing = _draft.HasTarget && _draft.Target == HotkeyTarget.App && string.IsNullOrEmpty(_draft.AppName);
+        bool othersNeedVolume = _draft.HasTarget && _draft.Target == HotkeyTarget.AllExceptActive && !_draft.IsVolumeAction;
         string? problem = conflict != null ? $"Already used: {HotkeyItemViewModel.Describe(conflict)}. Not saved."
             : appMissing ? "Pick or type an app. Not saved."
             : othersNeedVolume ? "'All except active' works with volume and mute only. Not saved."

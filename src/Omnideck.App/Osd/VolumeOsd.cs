@@ -58,7 +58,7 @@ public sealed class VolumeOsd : IDisposable
     {
         lock (_gate)
         {
-            if (!_settings.Enabled && !force) return;
+            if (!_settings.AnyEnabled && !force) return; // which kinds show is the feed's call
             _incoming = content;
         }
         PostMessage(_hwnd, WM_APP_SHOW, IntPtr.Zero, IntPtr.Zero);
@@ -146,7 +146,7 @@ public sealed class VolumeOsd : IDisposable
     /// <summary>A change made while the indicator is up (position, size, text) shows at once, not next time.</summary>
     private void OnSettingsChanged()
     {
-        if (!Settings.Enabled) { HideNow(); return; }
+        if (!Settings.AnyEnabled) { HideNow(); return; }
         if (_phase == Phase.Hidden) return;
         _layout = Settings.ToLayout();
         Place();

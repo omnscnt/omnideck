@@ -40,6 +40,7 @@ public sealed partial class HotkeyItemViewModel : ObservableObject
     public string Glyph => Binding switch
     {
         { IsAppAction: true } => "",                 // mixer
+        { Action: HotkeyAction.ToggleMicMute } => "",  // microphone
         { Target: HotkeyTarget.App } => "",          // app (until its icon loads)
         { Target: HotkeyTarget.ActiveWindow } => "", // windows
         { Target: HotkeyTarget.AllExceptActive } => "", // stacked windows: the others
@@ -51,7 +52,7 @@ public sealed partial class HotkeyItemViewModel : ObservableObject
     private async Task LoadIconAsync()
     {
         var binding = Binding;
-        string? path = binding.Target == HotkeyTarget.App && !binding.IsAppAction && !string.IsNullOrEmpty(binding.AppName)
+        string? path = binding.Target == HotkeyTarget.App && binding.HasTarget && !string.IsNullOrEmpty(binding.AppName)
             ? App.Instance.FindExePath(binding.AppName) ?? binding.AppPath
             : null;
         // Remember a running app's exe (bindings made before paths were kept): saved with the next change.
@@ -102,9 +103,10 @@ public sealed partial class HotkeyItemViewModel : ObservableObject
             HotkeyAction.PlayPause => "Play / pause",
             HotkeyAction.NextTrack => "Next track",
             HotkeyAction.PreviousTrack => "Previous track",
+            HotkeyAction.ToggleMicMute => "Mute / unmute microphone",
             _ => "Open mixer",
         };
-        return b.IsAppAction ? $"{trigger} · {action}" : $"{trigger} · {action} · {TargetName(b)}";
+        return !b.HasTarget ? $"{trigger} · {action}" : $"{trigger} · {action} · {TargetName(b)}";
     }
 
     public static string TargetName(HotkeyBinding b) => b.Target switch

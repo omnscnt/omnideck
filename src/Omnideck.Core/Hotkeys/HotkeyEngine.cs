@@ -29,6 +29,17 @@ public sealed class HotkeyEngine : IDisposable
     /// <summary>A binding fired. Raised on a thread-pool thread (repeatedly for held, repeating bindings).</summary>
     public event Action<HotkeyBinding>? Triggered;
 
+    /// <summary>Caps, Num or Scroll Lock was pressed (virtual-key code). Raised on the thread pool, once per press.</summary>
+    public event Action<int>? LockKeyPressed;
+
+    /// <summary>
+    /// A key that ends a keyboard-layout switch was released (Shift, Ctrl, Alt, Win, Space): the input
+    /// language may have just changed. Raised on the thread pool.
+    /// </summary>
+    public event Action? LayoutKeyReleased;
+
+    private int _lockKeyDown; // the lock key being held, so auto-repeat doesn't count as more presses
+
     /// <summary>While paused nothing fires and nothing is blocked (e.g. while the settings editor is open).</summary>
     public bool Paused { get; set; }
 
@@ -91,10 +102,25 @@ public sealed class HotkeyEngine : IDisposable
             bool isDown = message is 0x0100 or 0x0104; // WM_KEYDOWN, WM_SYSKEYDOWN
             bool isUp = message is 0x0101 or 0x0105;   // WM_KEYUP, WM_SYSKEYUP
             int vk = Marshal.ReadInt32(lParam); // KBDLLHOOKSTRUCT.vkCode
+            if (isDown || isUp) WatchSystemKeys(vk, isDown);
             if ((isDown || isUp) && !KeyChord.IsModifierKey(vk) && Handle(vk, isDown))
                 return 1; // swallow
         }
         return CallNextHookEx(_hook, code, wParam, lParam);
+    }
+
+    /// <summary>Lock keys and layout-switch keys, for the on-screen notices. Cheap: the hook must stay fast.</summary>
+    private void WatchSystemKeys(int vk, bool isDown)
+    {
+        if (vk is 0x14 or 0x90 or 0x91) // VK_CAPITAL, VK_NUMLOCK, VK_SCROLL
+        {
+            if (isDown && _lockKeyDown != vk) ThreadPool.QueueUserWorkItem(_ => LockKeyPressed?.Invoke(vk));
+            _lockKeyDown = isDown ? vk : 0;
+        }
+        else if (!isDown && vk is 0x10 or 0x11 or 0x12 or (>= 0xA0 and <= 0xA5) or 0x5B or 0x5C or 0x20)
+        {
+            ThreadPool.QueueUserWorkItem(_ => LayoutKeyReleased?.Invoke());
+        }
     }
 
     /// <summary>Returns true when the keystroke must be swallowed.</summary>

@@ -91,16 +91,34 @@ public sealed class VolumeOsdView
                 float edge = Math.Max(0, radius - 0.5f);
                 ds.DrawRoundedRectangle(Inflate(backing, -0.5f), edge, edge, light ? Color.FromArgb(0x1A, 0, 0, 0) : Color.FromArgb(0x24, 255, 255, 255), 1);
 
-                // Icon: the app's own, or a speaker that shows the level.
-                // The speaker is laid out by its ink (the widest variant, so the bar doesn't move with the level).
-                float iconWidth = _icon != null ? iconSize : SpeakerInkWidth(GlyphSize * k);
+                // Icon: the app's own, a given glyph, or a speaker that shows the level.
+                // Glyphs are laid out by their ink (the speaker by its widest variant, so the bar doesn't move with the level).
+                float iconWidth = _icon != null ? iconSize
+                    : content.Glyph != null ? GlyphInkWidth(content.Glyph, GlyphSize * k)
+                    : SpeakerInkWidth(GlyphSize * k);
                 var iconRect = new Rect(box.X + pad, box.Y + (box.Height - iconSize) / 2, iconWidth, iconSize);
                 if (_icon != null)
                     ds.DrawImage(_icon, iconRect, _icon.Bounds, content.Muted ? 0.4f : 1f, CanvasImageInterpolation.HighQualityCubic);
                 else
-                    DrawGlyph(ds, SpeakerGlyph(content), iconRect, GlyphSize * k, Fore(1), scale, alignLeft: true);
+                    DrawGlyph(ds, content.Glyph ?? SpeakerGlyph(content), iconRect, GlyphSize * k, Fore(1), scale, alignLeft: true);
                 if (_icon != null && content.Muted)
                     DrawGlyph(ds, "", new Rect(iconRect.Right - 9 * k, iconRect.Bottom - 9 * k, 12 * k, 12 * k), 11 * k, Fore(1), scale); // mute badge
+
+                if (content.Text != null)
+                {
+                    // A message instead of the bar: one line after the icon, cut with an ellipsis if too long.
+                    float textLeft = (float)iconRect.Right + BarGap * k * 1.2f;
+                    float textWidth = Math.Max(1, (float)(box.Right - pad) - textLeft);
+                    using var textFormat = new CanvasTextFormat
+                    {
+                        FontFamily = TextFont, FontSize = layout.TextSize, WordWrapping = CanvasWordWrapping.NoWrap,
+                        TrimmingGranularity = CanvasTextTrimmingGranularity.Character, TrimmingSign = CanvasTrimmingSign.Ellipsis,
+                    };
+                    using var text = new CanvasTextLayout(_device, content.Text, textFormat, textWidth, 1000);
+                    float textY = Snap((float)(box.Y + (box.Height - text.LayoutBounds.Height) / 2), scale);
+                    ds.DrawTextLayout(text, Snap(textLeft, scale), textY, Fore(content.Muted ? 0.6 : 0.9));
+                    goto done;
+                }
 
                 // Bar, then the number right after it.
                 float numberLeft = (float)(box.Right - pad - numberWidth);
@@ -115,6 +133,7 @@ public sealed class VolumeOsdView
 
                 float numberY = Snap(barY + barHeight / 2 - digitsHeight / 2 - digitsTop, scale);
                 ds.DrawText($"{(int)Math.Round(content.Volume * 100)}", numberLeft, numberY, Fore(content.Muted ? 0.45 : 0.85), format);
+            done:;
             }
         }
         return _target.GetPixelBytes();
@@ -135,6 +154,13 @@ public sealed class VolumeOsdView
         _icon = content.Icon == null ? null
             : CanvasBitmap.CreateFromBytes(_device, content.Icon, content.IconSize, content.IconSize,
                 Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized, 96, CanvasAlphaMode.Premultiplied);
+    }
+
+    private float GlyphInkWidth(string glyph, float size)
+    {
+        using var format = new CanvasTextFormat { FontFamily = IconFont, FontSize = size, WordWrapping = CanvasWordWrapping.NoWrap };
+        using var layout = new CanvasTextLayout(_device, glyph, format, 100, 100);
+        return (float)layout.DrawBounds.Width;
     }
 
     private float SpeakerInkWidth(float size)

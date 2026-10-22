@@ -22,6 +22,8 @@ public enum HotkeyAction
     PreviousTrack,
     /// <summary>Shows or hides the mixer flyout (handled by the app, not the sound core).</summary>
     OpenMixer,
+    /// <summary>Mutes or unmutes the default recording device.</summary>
+    ToggleMicMute,
 }
 
 /// <summary>What the action applies to.</summary>
@@ -63,6 +65,10 @@ public sealed class HotkeyBinding
 
     [JsonIgnore]
     public bool IsAppAction => Action is HotkeyAction.OpenMixer;
+
+    /// <summary>False for actions that act on one fixed thing (the mixer, the microphone): no target to pick.</summary>
+    [JsonIgnore]
+    public bool HasTarget => Action is not (HotkeyAction.OpenMixer or HotkeyAction.ToggleMicMute);
 
     [JsonIgnore]
     public bool IsVolumeAction => Action is HotkeyAction.VolumeUp or HotkeyAction.VolumeDown or HotkeyAction.ToggleMute;

@@ -74,7 +74,7 @@
                         <FontIcon Glyph="&#xE90E;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Volume indicator" Tag="osd">
+                <NavigationViewItem Content="OSD" Tag="osd">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE767;" />
                     </NavigationViewItem.Icon>
@@ -466,16 +466,18 @@
                 </Grid>
                 </ScrollViewer>
 
-                <!-- Volume indicator page -->
+                <!-- OSD page: what each on-screen notice shows, and the one look they share -->
                 <ScrollViewer x:Name="OsdPage" Visibility="Collapsed">
                 <Grid x:Name="OsdContentGrid" Padding="36,8,36,36">
                     <StackPanel Spacing="4">
-                        <TextBlock Margin="0,0,0,8" Style="{StaticResource TitleTextBlockStyle}" Text="Volume indicator" />
+                        <TextBlock Margin="0,0,0,8" Style="{StaticResource TitleTextBlockStyle}" Text="OSD" />
                         <TextBlock
                             Margin="0,0,0,16"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="A small, unclickable bar that shows the new volume when a hotkey changes it, for the whole device or a single app."
+                            Text="Small, unclickable notices on the screen with the mouse pointer. Pick what they show; they all share the look below."
                             TextWrapping="Wrap" />
+
+                        <TextBlock Margin="2,4,0,6" Style="{StaticResource BodyStrongTextBlockStyle}" Text="What to show" />
 
                         <Border Style="{StaticResource SettingsCardStyle}">
                             <Grid ColumnSpacing="16">
@@ -484,16 +486,108 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Show the volume indicator" />
+                                    <TextBlock Text="Volume" />
                                     <TextBlock
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
                                         TextWrapping="Wrap"
-                                        Text="Appears on the screen with the mouse pointer." />
+                                        Text="A bar with the new volume when a hotkey changes it, for the whole device or a single app." />
                                 </StackPanel>
-                                <ToggleSwitch x:Name="OsdSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Show the volume indicator" Toggled="OnOsdChanged" />
+                                <ToggleSwitch x:Name="OsdSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Volume" Toggled="OnOsdChanged" />
                             </Grid>
                         </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Also other volume changes" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Media keys, the Windows mixer and apps changing their own volume. Not the omnideck mixer: its sliders already show it." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="OsdExternalSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Also other volume changes" Toggled="OnOsdChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Microphone" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="When the default microphone is muted or unmuted, by a hotkey or anything else." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="OsdMicSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Microphone" Toggled="OnOsdChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Lock keys" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Caps Lock, Num Lock and Scroll Lock turning on or off." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="OsdLocksSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Lock keys" Toggled="OnOsdChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Keyboard layout" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="The new input language when you switch it from the keyboard." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="OsdLayoutSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Keyboard layout" Toggled="OnOsdChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Output device" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="The device's name when the default output changes." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="OsdDeviceSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Output device" Toggled="OnOsdChanged" />
+                            </Grid>
+                        </Border>
+
+                        <TextBlock Margin="2,20,0,6" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Look" />
 
                         <Border Style="{StaticResource SettingsCardStyle}">
                             <Grid ColumnSpacing="16">
@@ -678,30 +772,12 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Also show other changes" />
-                                    <TextBlock
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        TextWrapping="Wrap"
-                                        Text="Media keys, the Windows mixer and apps changing their own volume. Not the omnideck mixer: its sliders already show it." />
-                                </StackPanel>
-                                <ToggleSwitch x:Name="OsdExternalSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Also show other changes" Toggled="OnOsdChanged" />
-                            </Grid>
-                        </Border>
-
-                        <Border Style="{StaticResource SettingsCardStyle}">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Preview" />
                                     <TextBlock
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
                                         TextWrapping="Wrap"
-                                        Text="Shows the indicator with the current master volume." />
+                                        Text="Shows the volume notice with the current master volume." />
                                 </StackPanel>
                                 <Button Grid.Column="1" HorizontalAlignment="Right" Click="OnOsdPreview" Content="Show" />
                             </Grid>
