@@ -58,8 +58,15 @@ public readonly record struct OsdLayout(float Width, float Height, float Backing
 /// <param name="Icon">An app's icon as premultiplied BGRA, <paramref name="IconSize"/> square; null for a glyph.</param>
 /// <param name="Glyph">A Segoe Fluent glyph for the icon spot; null with no <paramref name="Icon"/> means the speaker that shows the level.</param>
 /// <param name="Text">Shown instead of the bar and number (microphone, lock keys, layout, device).</param>
-public sealed record OsdContent(string Key, byte[]? Icon, int IconSize, float Volume, bool Muted, string? Glyph = null, string? Text = null)
+/// <param name="KeyLabel">Draws a key cap with this label as the icon (lock keys, layout), instead of a glyph.</param>
+/// <param name="KeyOn">The key cap's light: on, off, or none (null).</param>
+public sealed record OsdContent(
+    string Key, byte[]? Icon, int IconSize, float Volume, bool Muted,
+    string? Glyph = null, string? Text = null, string? KeyLabel = null, bool? KeyOn = null)
 {
     public static OsdContent Message(string key, string glyph, string text, bool dimmed = false) =>
         new(key, null, 0, 0, dimmed, glyph, text);
+
+    public static OsdContent KeyNotice(string key, string label, bool? lit, string text, bool dimmed = false) =>
+        new(key, null, 0, 0, dimmed, null, text, label, lit);
 }

@@ -26,16 +26,43 @@ public sealed class VolumeOsdView
     private CanvasBitmap? _icon;
     private byte[]? _iconSource;
 
-    /// <summary>The window's size for <paramref name="layout"/>: the backing plus room for its shadow.</summary>
-    public static Size SizeDip(OsdLayout layout) => new(
-        Math.Max(1, layout.Width + 2 * layout.Backing) + 2 * ShadowMargin,
+    /// <summary>Widest a text notice gets before its text is cut with an ellipsis.</summary>
+    private const float MaxTextBoxWidth = 480;
+
+    /// <summary>The window's size for this content: the backing plus room for its shadow.</summary>
+    public Size SizeDip(OsdContent content, OsdLayout layout) => new(
+        Math.Max(1, BoxWidth(content, layout) + 2 * layout.Backing) + 2 * ShadowMargin,
         Math.Max(1, layout.Height + 2 * layout.Backing) + 2 * ShadowMargin);
+
+    /// <summary>
+    /// The content box's width: the configured width for the volume bar; a text notice is as wide as its
+    /// icon and text need (padding on both sides), so it never has an empty stretch.
+    /// </summary>
+    private float BoxWidth(OsdContent content, OsdLayout layout)
+    {
+        if (content.Text == null) return layout.Width;
+        float k = layout.Height / BaseHeight;
+        using var format = new CanvasTextFormat { FontFamily = TextFont, FontSize = layout.TextSize, WordWrapping = CanvasWordWrapping.NoWrap };
+        using var text = new CanvasTextLayout(_device, content.Text, format, 10000, 1000);
+        float width = 2 * Pad * k + IconWidth(content, k) + TextGap * k + (float)Math.Ceiling(text.LayoutBounds.Width) + 1;
+        return Math.Clamp(width, layout.Height * 2, MaxTextBoxWidth);
+    }
+
+    private const float TextGap = 12, KeyCapHeight = 20;
+
+    /// <summary>How wide the icon spot is: an app icon, a key cap, a glyph by its ink, or the speaker.</summary>
+    private float IconWidth(OsdContent content, float k)
+    {
+        if (content.KeyLabel != null) return KeyCapWidth(content.KeyLabel, k);
+        if (content.Icon != null) return IconSize * k;
+        return content.Glyph != null ? GlyphInkWidth(content.Glyph, GlyphSize * k) : SpeakerInkWidth(GlyphSize * k);
+    }
 
     /// <param name="level">The bar's (animated) level, 0..1.</param>
     /// <param name="opacity">The whole indicator's (animated) opacity.</param>
     public byte[] Render(OsdContent content, OsdLayout layout, float level, float opacity, bool light, double scale, out int width, out int height)
     {
-        var size = SizeDip(layout);
+        var size = SizeDip(content, layout);
         width = (int)Math.Ceiling(size.Width * scale);
         height = (int)Math.Ceiling(size.Height * scale);
         if (_target == null || _target.SizeInPixels.Width != width || _target.SizeInPixels.Height != height)
@@ -51,7 +78,7 @@ public sealed class VolumeOsdView
         Color Fore(double alpha) => Color.FromArgb((byte)(alpha * 255), fore.R, fore.G, fore.B);
 
         // The content box holds icon, bar and number; the backing extends past it by Backing on every side.
-        var box = new Rect(ShadowMargin + layout.Backing, ShadowMargin + layout.Backing, layout.Width, layout.Height);
+        var box = new Rect(ShadowMargin + layout.Backing, ShadowMargin + layout.Backing, BoxWidth(content, layout), layout.Height);
         var backing = new Rect(ShadowMargin, ShadowMargin, size.Width - 2 * ShadowMargin, size.Height - 2 * ShadowMargin);
         float radius = (float)(Math.Clamp(layout.CornerPercent, 0, 100) / 100 * Math.Min(backing.Width, backing.Height) / 2);
 
@@ -93,11 +120,11 @@ public sealed class VolumeOsdView
 
                 // Icon: the app's own, a given glyph, or a speaker that shows the level.
                 // Glyphs are laid out by their ink (the speaker by its widest variant, so the bar doesn't move with the level).
-                float iconWidth = _icon != null ? iconSize
-                    : content.Glyph != null ? GlyphInkWidth(content.Glyph, GlyphSize * k)
-                    : SpeakerInkWidth(GlyphSize * k);
+                float iconWidth = IconWidth(content, k);
                 var iconRect = new Rect(box.X + pad, box.Y + (box.Height - iconSize) / 2, iconWidth, iconSize);
-                if (_icon != null)
+                if (content.KeyLabel != null)
+                    DrawKeyCap(ds, content.KeyLabel, content.KeyOn, iconRect, k, Fore, scale);
+                else if (_icon != null)
                     ds.DrawImage(_icon, iconRect, _icon.Bounds, content.Muted ? 0.4f : 1f, CanvasImageInterpolation.HighQualityCubic);
                 else
                     DrawGlyph(ds, content.Glyph ?? SpeakerGlyph(content), iconRect, GlyphSize * k, Fore(1), scale, alignLeft: true);
@@ -107,7 +134,7 @@ public sealed class VolumeOsdView
                 if (content.Text != null)
                 {
                     // A message instead of the bar: one line after the icon, cut with an ellipsis if too long.
-                    float textLeft = (float)iconRect.Right + BarGap * k * 1.2f;
+                    float textLeft = (float)iconRect.Right + TextGap * k;
                     float textWidth = Math.Max(1, (float)(box.Right - pad) - textLeft);
                     using var textFormat = new CanvasTextFormat
                     {
@@ -154,6 +181,49 @@ public sealed class VolumeOsdView
         _icon = content.Icon == null ? null
             : CanvasBitmap.CreateFromBytes(_device, content.Icon, content.IconSize, content.IconSize,
                 Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized, 96, CanvasAlphaMode.Premultiplied);
+    }
+
+    // ---- key caps: the icon for lock keys and the keyboard layout -----------------------------------
+
+    private CanvasTextFormat KeyCapFormat(float k) => new()
+    {
+        FontFamily = TextFont, FontSize = 11 * k, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+        WordWrapping = CanvasWordWrapping.NoWrap,
+    };
+
+    /// <summary>At least square; wider for a longer label ("EN"), with room on both sides of it.</summary>
+    private float KeyCapWidth(string label, float k)
+    {
+        using var format = KeyCapFormat(k);
+        using var text = new CanvasTextLayout(_device, label, format, 1000, 100);
+        return Math.Max(KeyCapHeight * k, (float)text.DrawBounds.Width + 10 * k);
+    }
+
+    /// <summary>
+    /// A key: rounded outline, its label in the middle and (for lock keys) a light in the corner, filled
+    /// when the lock is on. The label is centred by its ink, snapped to pixels.
+    /// </summary>
+    private void DrawKeyCap(CanvasDrawingSession ds, string label, bool? lit, Rect spot, float k, Func<double, Color> fore, double scale)
+    {
+        float h = KeyCapHeight * k, w = (float)spot.Width;
+        var cap = new Rect(spot.X, spot.Y + (spot.Height - h) / 2, w, h);
+        float stroke = Math.Max(1, 1.4f * k), r = 4 * k;
+        ds.DrawRoundedRectangle(Inflate(cap, -stroke / 2), r, r, fore(0.9), stroke);
+
+        using var format = KeyCapFormat(k);
+        using var text = new CanvasTextLayout(_device, label, format, 1000, 100);
+        var ink = text.DrawBounds;
+        float x = Snap((float)(cap.X + (cap.Width - ink.Width) / 2 - ink.X), scale);
+        float y = Snap((float)(cap.Y + (cap.Height - ink.Height) / 2 - ink.Y + (lit != null ? 1.5f * k : 0)), scale);
+        ds.DrawTextLayout(text, x, y, fore(1));
+
+        if (lit is bool on)
+        {
+            var light = new Vector2((float)cap.Right - 5 * k, (float)cap.Y + 5 * k);
+            float radius = 1.9f * k;
+            if (on) ds.FillCircle(light, radius, fore(1));
+            else ds.DrawCircle(light, radius, fore(0.55), Math.Max(0.8f, 0.9f * k));
+        }
     }
 
     private float GlyphInkWidth(string glyph, float size)

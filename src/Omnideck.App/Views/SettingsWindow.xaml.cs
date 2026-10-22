@@ -45,6 +45,7 @@ public sealed partial class SettingsWindow : Window
         AutoStartSwitch.IsOn = AutoStart.IsEnabled;
         LogVolumeSwitch.IsOn = App.Instance.LogarithmicVolume;
         LoadWidgetSettings();
+        SetupOsdTiles();
         LoadOsdSettings();
         LoadUpdateSettings();
         SettingsPathText.Text = $"Settings are stored in {SettingsStore.FilePath}";
@@ -537,15 +538,28 @@ public sealed partial class SettingsWindow : Window
     private VolumeOsdSettings _osd = new();
     private bool _loadingOsd = true; // until LoadOsdSettings: the slider fires ValueChanged while XAML is still being built
 
+    private OsdKindTile _osdVolume = null!, _osdMic = null!, _osdLocks = null!, _osdLayout = null!, _osdDevice = null!;
+
+    /// <summary>The tiles that pick which notices show; each change applies (and saves) at once.</summary>
+    private void SetupOsdTiles()
+    {
+        _osdVolume = new("Volume", "The new volume when a hotkey changes it", "", ApplyOsd);
+        _osdMic = new("Microphone", "Muted or on, by a hotkey or anything else", "", ApplyOsd);
+        _osdLocks = new("Lock keys", "Caps, Num and Scroll Lock on or off", "", ApplyOsd);
+        _osdLayout = new("Keyboard layout", "The input language you switch to", "", ApplyOsd);
+        _osdDevice = new("Output device", "The new default output", "", ApplyOsd);
+        OsdKindTiles.ItemsSource = new[] { _osdVolume, _osdMic, _osdLocks, _osdLayout, _osdDevice };
+    }
+
     private void LoadOsdSettings()
     {
         _loadingOsd = true;
         _osd = App.Instance.VolumeOsdSettings;
-        OsdSwitch.IsOn = _osd.Enabled;
-        OsdMicSwitch.IsOn = _osd.ShowMicrophone;
-        OsdLocksSwitch.IsOn = _osd.ShowLockKeys;
-        OsdLayoutSwitch.IsOn = _osd.ShowKeyboardLayout;
-        OsdDeviceSwitch.IsOn = _osd.ShowOutputDevice;
+        _osdVolume.Load(_osd.Enabled);
+        _osdMic.Load(_osd.ShowMicrophone);
+        _osdLocks.Load(_osd.ShowLockKeys);
+        _osdLayout.Load(_osd.ShowKeyboardLayout);
+        _osdDevice.Load(_osd.ShowOutputDevice);
         UpdateOsdPicker();
         OsdDurationSlider.Value = _osd.DurationMs / 1000.0;
         OsdExternalSwitch.IsOn = _osd.ShowExternalChanges;
@@ -568,11 +582,11 @@ public sealed partial class SettingsWindow : Window
     private void ApplyOsd()
     {
         if (_loadingOsd) return;
-        _osd.Enabled = OsdSwitch.IsOn;
-        _osd.ShowMicrophone = OsdMicSwitch.IsOn;
-        _osd.ShowLockKeys = OsdLocksSwitch.IsOn;
-        _osd.ShowKeyboardLayout = OsdLayoutSwitch.IsOn;
-        _osd.ShowOutputDevice = OsdDeviceSwitch.IsOn;
+        _osd.Enabled = _osdVolume.IsOn;
+        _osd.ShowMicrophone = _osdMic.IsOn;
+        _osd.ShowLockKeys = _osdLocks.IsOn;
+        _osd.ShowKeyboardLayout = _osdLayout.IsOn;
+        _osd.ShowOutputDevice = _osdDevice.IsOn;
         _osd.DurationMs = (int)Math.Round(OsdDurationSlider.Value * 1000);
         _osd.ShowExternalChanges = OsdExternalSwitch.IsOn;
         _osd.Width = (int)Math.Round(OsdWidthSlider.Value);

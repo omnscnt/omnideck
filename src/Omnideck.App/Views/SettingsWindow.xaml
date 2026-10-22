@@ -468,6 +468,76 @@
 
                 <!-- OSD page: what each on-screen notice shows, and the one look they share -->
                 <ScrollViewer x:Name="OsdPage" Visibility="Collapsed">
+                <ScrollViewer.Resources>
+                    <!-- A card-like tile that switches a notice kind: dimmed when off, a check badge when on. -->
+                    <Style x:Key="OsdTileStyle" TargetType="ToggleButton">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Grid>
+                                        <VisualStateManager.VisualStateGroups>
+                                            <VisualStateGroup x:Name="CommonStates">
+                                                <VisualState x:Name="Normal" />
+                                                <VisualState x:Name="PointerOver">
+                                                    <VisualState.Setters>
+                                                        <Setter Target="Surface.Background" Value="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
+                                                    </VisualState.Setters>
+                                                </VisualState>
+                                                <VisualState x:Name="Pressed">
+                                                    <VisualState.Setters>
+                                                        <Setter Target="Content.Opacity" Value="0.45" />
+                                                    </VisualState.Setters>
+                                                </VisualState>
+                                                <VisualState x:Name="Checked">
+                                                    <VisualState.Setters>
+                                                        <Setter Target="Surface.BorderBrush" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+                                                        <Setter Target="Content.Opacity" Value="1" />
+                                                        <Setter Target="Badge.Visibility" Value="Visible" />
+                                                    </VisualState.Setters>
+                                                </VisualState>
+                                                <VisualState x:Name="CheckedPointerOver">
+                                                    <VisualState.Setters>
+                                                        <Setter Target="Surface.Background" Value="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
+                                                        <Setter Target="Surface.BorderBrush" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+                                                        <Setter Target="Content.Opacity" Value="1" />
+                                                        <Setter Target="Badge.Visibility" Value="Visible" />
+                                                    </VisualState.Setters>
+                                                </VisualState>
+                                                <VisualState x:Name="CheckedPressed">
+                                                    <VisualState.Setters>
+                                                        <Setter Target="Surface.BorderBrush" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+                                                        <Setter Target="Content.Opacity" Value="0.75" />
+                                                        <Setter Target="Badge.Visibility" Value="Visible" />
+                                                    </VisualState.Setters>
+                                                </VisualState>
+                                            </VisualStateGroup>
+                                        </VisualStateManager.VisualStateGroups>
+                                        <Border
+                                            x:Name="Surface"
+                                            Padding="14,12"
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="{ThemeResource OverlayCornerRadius}">
+                                            <ContentPresenter x:Name="Content" Content="{TemplateBinding Content}" Opacity="0.55" />
+                                        </Border>
+                                        <Grid
+                                            x:Name="Badge"
+                                            Width="20"
+                                            Height="20"
+                                            Margin="0,10,10,0"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Top"
+                                            Visibility="Collapsed">
+                                            <Ellipse Fill="{ThemeResource TextFillColorPrimaryBrush}" />
+                                            <FontIcon FontSize="11" Foreground="{ThemeResource SolidBackgroundFillColorBaseBrush}" Glyph="&#xE73E;" />
+                                        </Grid>
+                                    </Grid>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ScrollViewer.Resources>
                 <Grid x:Name="OsdContentGrid" Padding="36,8,36,36">
                     <StackPanel Spacing="4">
                         <TextBlock Margin="0,0,0,8" Style="{StaticResource TitleTextBlockStyle}" Text="OSD" />
@@ -479,25 +549,42 @@
 
                         <TextBlock Margin="2,4,0,6" Style="{StaticResource BodyStrongTextBlockStyle}" Text="What to show" />
 
-                        <Border Style="{StaticResource SettingsCardStyle}">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Volume" />
-                                    <TextBlock
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        TextWrapping="Wrap"
-                                        Text="A bar with the new volume when a hotkey changes it, for the whole device or a single app." />
-                                </StackPanel>
-                                <ToggleSwitch x:Name="OsdSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Volume" Toggled="OnOsdChanged" />
-                            </Grid>
-                        </Border>
+                        <!-- One tile per kind: click to switch it on or off. -->
+                        <ItemsRepeater x:Name="OsdKindTiles">
+                            <ItemsRepeater.Layout>
+                                <UniformGridLayout ItemsStretch="Fill" MinColumnSpacing="8" MinItemHeight="112" MinItemWidth="150" MinRowSpacing="8" />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="vm:OsdKindTile">
+                                    <ToggleButton
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch"
+                                        AutomationProperties.Name="{x:Bind Title}"
+                                        IsChecked="{x:Bind IsOn, Mode=TwoWay}"
+                                        Style="{StaticResource OsdTileStyle}">
+                                        <Grid RowSpacing="2">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="*" />
+                                            </Grid.RowDefinitions>
+                                            <FontIcon Margin="0,0,0,8" HorizontalAlignment="Left" FontSize="22" Glyph="{x:Bind Glyph}" />
+                                            <TextBlock Grid.Row="1" Style="{StaticResource BodyStrongTextBlockStyle}" Text="{x:Bind Title}" />
+                                            <TextBlock
+                                                Grid.Row="2"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                MaxLines="2"
+                                                Style="{StaticResource CaptionTextBlockStyle}"
+                                                Text="{x:Bind Caption}"
+                                                TextTrimming="CharacterEllipsis"
+                                                TextWrapping="Wrap" />
+                                        </Grid>
+                                    </ToggleButton>
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
 
-                        <Border Style="{StaticResource SettingsCardStyle}">
+                        <Border Margin="0,4,0,0" Style="{StaticResource SettingsCardStyle}">
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -509,81 +596,9 @@
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
                                         TextWrapping="Wrap"
-                                        Text="Media keys, the Windows mixer and apps changing their own volume. Not the omnideck mixer: its sliders already show it." />
+                                        Text="Volume notices for media keys, the Windows mixer and apps changing their own volume too. Not the omnideck mixer: its sliders already show it." />
                                 </StackPanel>
                                 <ToggleSwitch x:Name="OsdExternalSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Also other volume changes" Toggled="OnOsdChanged" />
-                            </Grid>
-                        </Border>
-
-                        <Border Style="{StaticResource SettingsCardStyle}">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Microphone" />
-                                    <TextBlock
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        TextWrapping="Wrap"
-                                        Text="When the default microphone is muted or unmuted, by a hotkey or anything else." />
-                                </StackPanel>
-                                <ToggleSwitch x:Name="OsdMicSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Microphone" Toggled="OnOsdChanged" />
-                            </Grid>
-                        </Border>
-
-                        <Border Style="{StaticResource SettingsCardStyle}">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Lock keys" />
-                                    <TextBlock
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        TextWrapping="Wrap"
-                                        Text="Caps Lock, Num Lock and Scroll Lock turning on or off." />
-                                </StackPanel>
-                                <ToggleSwitch x:Name="OsdLocksSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Lock keys" Toggled="OnOsdChanged" />
-                            </Grid>
-                        </Border>
-
-                        <Border Style="{StaticResource SettingsCardStyle}">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Keyboard layout" />
-                                    <TextBlock
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        TextWrapping="Wrap"
-                                        Text="The new input language when you switch it from the keyboard." />
-                                </StackPanel>
-                                <ToggleSwitch x:Name="OsdLayoutSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Keyboard layout" Toggled="OnOsdChanged" />
-                            </Grid>
-                        </Border>
-
-                        <Border Style="{StaticResource SettingsCardStyle}">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Output device" />
-                                    <TextBlock
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        TextWrapping="Wrap"
-                                        Text="The device's name when the default output changes." />
-                                </StackPanel>
-                                <ToggleSwitch x:Name="OsdDeviceSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Output device" Toggled="OnOsdChanged" />
                             </Grid>
                         </Border>
 
@@ -639,12 +654,12 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Width" />
+                                    <TextBlock Text="Volume bar width" />
                                     <TextBlock
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
                                         TextWrapping="Wrap"
-                                        Text="Length of the indicator; the bar takes up the extra room." />
+                                        Text="Length of the volume notice; the bar takes up the extra room. Text notices fit their text." />
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
                                     <Slider x:Name="OsdWidthSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Width"

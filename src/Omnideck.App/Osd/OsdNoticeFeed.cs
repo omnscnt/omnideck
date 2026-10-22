@@ -13,7 +13,7 @@ namespace Omnideck.Osd;
 public sealed class OsdNoticeFeed
 {
     // Segoe Fluent Icons.
-    private const string MicGlyph = "", MicOffGlyph = "", KeyboardGlyph = "", LanguageGlyph = "", SpeakerGlyph = "";
+    private const string MicGlyph = "", MicOffGlyph = "", SpeakerGlyph = "";
 
     private readonly AudioService _audio;
     private readonly VolumeOsd _osd;
@@ -91,8 +91,8 @@ public sealed class OsdNoticeFeed
         // The toggle flips as the key goes down; read it once Windows has applied it.
         Thread.Sleep(60);
         bool on = (GetKeyState(vk) & 1) != 0;
-        string name = vk switch { 0x14 => "Caps Lock", 0x90 => "Num Lock", _ => "Scroll Lock" };
-        _osd.Show(OsdContent.Message("lock:" + vk, KeyboardGlyph, $"{name} {(on ? "on" : "off")}", dimmed: !on));
+        var (name, label) = vk switch { 0x14 => ("Caps Lock", "A"), 0x90 => ("Num Lock", "1"), _ => ("Scroll Lock", "2195") };
+        _osd.Show(OsdContent.KeyNotice("lock:" + vk, label, on, $"{name} {(on ? "on" : "off")}", dimmed: !on));
     }
 
     // ---- keyboard layout -------------------------------------------------------------------------
@@ -112,7 +112,8 @@ public sealed class OsdNoticeFeed
             _layout = layout;
         }
         if (!switched || !_settings().ShowKeyboardLayout) return;
-        _osd.Show(OsdContent.Message("layout", LanguageGlyph, LanguageName(layout)));
+        var (code, name) = Language(layout);
+        _osd.Show(OsdContent.KeyNotice("layout", code, null, name));
     }
 
     private static void ReadLayout(out IntPtr window, out IntPtr layout)
@@ -122,19 +123,23 @@ public sealed class OsdNoticeFeed
         layout = thread == 0 ? IntPtr.Zero : GetKeyboardLayout(thread);
     }
 
-    /// <summary>"Русский (Россия)", "English (United States)": the language as its speakers write it.</summary>
-    private static string LanguageName(IntPtr layout)
+    /// <summary>
+    /// The key cap's code ("EN", "RU") and the language as its speakers write it ("English (United States)",
+    /// "Русский (Россия)").
+    /// </summary>
+    private static (string Code, string Name) Language(IntPtr layout)
     {
         int langId = (int)((long)layout & 0xFFFF);
         try
         {
             var culture = new CultureInfo(langId);
             string name = culture.NativeName;
-            return name.Length > 0 ? char.ToUpper(name[0], culture) + name[1..] : culture.Name;
+            name = name.Length > 0 ? char.ToUpper(name[0], culture) + name[1..] : culture.Name;
+            return (culture.TwoLetterISOLanguageName.ToUpperInvariant(), name);
         }
         catch (CultureNotFoundException)
         {
-            return $"Layout {langId:X4}";
+            return ("?", $"Layout {langId:X4}");
         }
     }
 

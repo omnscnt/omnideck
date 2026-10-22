@@ -126,7 +126,14 @@ public sealed class VolumeOsd : IDisposable
         lock (_gate) content = _incoming;
         if (content == null) return;
 
+        var previous = _content;
         _content = content;
+        if (_phase != Phase.Hidden && previous?.Key != content.Key)
+        {
+            // Another kind (or target) while up: a text notice has its own width, and the bar starts at its value.
+            Place();
+            _level = content.Volume;
+        }
         if (_phase == Phase.Hidden)
         {
             _layout = Settings.ToLayout(); // the size is taken when it appears
@@ -163,7 +170,7 @@ public sealed class VolumeOsd : IDisposable
         _scale = GetDpiForMonitor(monitor, 0, out uint dpi, out _) == 0 ? dpi / 96.0 : 1.0;
 
         var work = info.rcWork;
-        var size = VolumeOsdView.SizeDip(_layout);
+        var size = _content == null ? default : _view.SizeDip(_content, _layout);
         int w = (int)Math.Ceiling(size.Width * _scale), h = (int)Math.Ceiling(size.Height * _scale);
         // The pill (not its shadow margin) keeps this distance from the screen's edges.
         int edge = (int)Math.Round((48 - VolumeOsdView.ShadowMargin) * _scale);
