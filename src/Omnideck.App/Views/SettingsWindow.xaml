@@ -5,7 +5,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:vm="using:Omnideck.ViewModels"
     xmlns:views="using:Omnideck.Views"
-    xmlns:controlsPrimitives="using:Microsoft.UI.Xaml.Controls.Primitives"
     Title="omnideck. Settings">
 
     <Grid>
@@ -862,30 +861,28 @@
                                         <!-- The colour itself; the button's own surface stays a thin frame around it. -->
                                         <Border x:Name="LockLightFill" CornerRadius="3" />
                                         <Button.Flyout>
-                                            <Flyout Placement="BottomEdgeAlignedRight">
+                                            <!-- Drawn inside the window (constrained to it), not as its own popup window, which Windows
+                                                 frames with a light border and shadow. -->
+                                            <Flyout Opened="OnLockLightFlyoutOpened" Placement="BottomEdgeAlignedRight" ShouldConstrainToRootBounds="True">
                                                 <Flyout.FlyoutPresenterStyle>
                                                     <Style TargetType="FlyoutPresenter">
-                                                        <Setter Property="Padding" Value="12" />
-                                                        <Setter Property="BorderThickness" Value="1" />
+                                                        <Setter Property="Padding" Value="16,16,16,6" />
+                                                        <!-- No default shadow and an opaque surface: the shadow and the acrylic edge read as a light halo. -->
+                                                        <Setter Property="IsDefaultShadowEnabled" Value="False" />
+                                                        <Setter Property="Background" Value="{ThemeResource SolidBackgroundFillColorTertiaryBrush}" />
                                                         <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                                                        <Setter Property="BorderThickness" Value="1" />
+                                                        <Setter Property="CornerRadius" Value="{ThemeResource OverlayCornerRadius}" />
                                                     </Style>
                                                 </Flyout.FlyoutPresenterStyle>
-                                                <!-- Hue and saturation in the box, brightness on the slider. -->
-                                                <StackPanel Width="200" Spacing="10">
-                                                    <controlsPrimitives:ColorSpectrum
-                                                        x:Name="LockLightSpectrum"
-                                                        Height="200"
-                                                        ColorChanged="OnLockLightPicked"
-                                                        Components="HueSaturation"
-                                                        CornerRadius="4"
-                                                        Shape="Box" />
-                                                    <Slider
-                                                        x:Name="LockLightBrightness"
-                                                        AutomationProperties.Name="Brightness"
-                                                        Maximum="100"
-                                                        Minimum="0"
-                                                        ValueChanged="OnLockLightBrightness" />
-                                                </StackPanel>
+                                                <ColorPicker
+                                                    x:Name="LockLightPicker"
+                                                    ColorChanged="OnLockLightPicked"
+                                                    IsAlphaEnabled="False"
+                                                    IsColorChannelTextInputVisible="False"
+                                                    IsHexInputVisible="False"
+                                                    IsMoreButtonVisible="False"
+                                                    Loaded="OnLockLightPickerLoaded" />
                                             </Flyout>
                                         </Button.Flyout>
                                     </Button>

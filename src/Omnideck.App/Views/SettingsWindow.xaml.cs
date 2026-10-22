@@ -557,49 +557,51 @@ public sealed partial class SettingsWindow : Window
 
     private bool _syncingLight;
 
-    private void ShowLockLight(bool fromSpectrum = false)
+    private void ShowLockLight()
     {
         var color = VolumeOsdSettings.ParseColor(_osd.LockLightColor) ?? VolumeOsdSettings.ParseColor(VolumeOsdSettings.DefaultLockLight)!.Value;
         _syncingLight = true;
         LockLightBox.Text = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
         LockLightFill.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(color);
-        if (!fromSpectrum) // while dragging in the box, the box already has the colour (and its hue at zero brightness)
-        {
-            var hsv = ToHsv(color);
-            LockLightSpectrum.HsvColor = hsv;
-            LockLightBrightness.Value = Math.Round(hsv.Z * 100);
-        }
+        LockLightPicker.Color = color;
         _syncingLight = false;
     }
 
-    private void SetLockLight(Windows.UI.Color color, bool fromSpectrum = false)
+    private void SetLockLight(Windows.UI.Color color)
     {
         _osd.LockLightColor = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
-        ShowLockLight(fromSpectrum);
+        ShowLockLight();
         ApplyOsd();
     }
 
-    private void OnLockLightPicked(Microsoft.UI.Xaml.Controls.Primitives.ColorSpectrum sender, ColorChangedEventArgs args)
+    private void OnLockLightPicked(ColorPicker sender, ColorChangedEventArgs args)
     {
-        if (!_syncingLight) SetLockLight(args.NewColor, fromSpectrum: true);
+        if (!_syncingLight) SetLockLight(args.NewColor);
     }
 
-    /// <summary>The slider sets the brightness the box leaves out; the box keeps its hue and saturation.</summary>
-    private void OnLockLightBrightness(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    /// <summary>
+    /// With "More" hidden, ColorPicker still keeps its panel (and the panel's bottom margin) under the
+    /// sliders: an empty strip. Collapse it, and the root's vertical padding with it.
+    /// </summary>
+    private void OnLockLightFlyoutOpened(object? sender, object e) =>
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => OnLockLightPickerLoaded(LockLightPicker, new RoutedEventArgs()));
+
+    private void OnLockLightPickerLoaded(object sender, RoutedEventArgs e)
     {
-        if (_syncingLight) return;
-        var hsv = LockLightSpectrum.HsvColor;
-        LockLightSpectrum.HsvColor = new System.Numerics.Vector4(hsv.X, hsv.Y, (float)(e.NewValue / 100), 1);
+        if (FindNamed(LockLightPicker, "MoreEntriesPanel") is UIElement more) more.Visibility = Visibility.Collapsed;
+        if (FindNamed(LockLightPicker, "RootGrid") is Grid root) root.Padding = new Thickness(0);
+        if (FindNamed(LockLightPicker, "ThirdDimensionSliderGrid") is Grid slider) slider.Margin = new Thickness(0);
     }
 
-    /// <summary>RGB to (hue 0–360, saturation 0–1, value 0–1, alpha 1), as ColorSpectrum takes it.</summary>
-    private static System.Numerics.Vector4 ToHsv(Windows.UI.Color c)
+    private static FrameworkElement? FindNamed(DependencyObject parent, string name)
     {
-        float r = c.R / 255f, g = c.G / 255f, b = c.B / 255f;
-        float max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b)), d = max - min;
-        float h = d == 0 ? 0 : max == r ? 60 * (((g - b) / d) % 6) : max == g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
-        if (h < 0) h += 360;
-        return new System.Numerics.Vector4(h, max == 0 ? 0 : d / max, max, 1);
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is FrameworkElement { Name: var n } element && n == name) return element;
+            if (FindNamed(child, name) is { } deeper) return deeper;
+        }
+        return null;
     }
 
     private void OnLockLightKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
