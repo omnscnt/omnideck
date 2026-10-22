@@ -144,11 +144,13 @@
                             <Setter Property="MinHeight" Value="0" />
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                             <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="CornerRadius" Value="{ThemeResource OverlayCornerRadius}" />
                             <!-- Bare container: the card draws its own surface and hover. -->
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListViewItem">
-                                        <Grid x:Name="Root" Background="Transparent">
+                                        <Grid x:Name="Root" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
                                             <ContentPresenter
                                                 HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
                                                 VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"

@@ -174,8 +174,9 @@ public sealed partial class SettingsWindow : Window
     private void OnAddClick(object sender, RoutedEventArgs e) => Hotkeys.AddDraft();
 
     // ---- hotkey card reordering --------------------------------------------------------------------
-    // Our own drag instead of ListView's: the card itself follows the pointer (opaque, above the others),
-    // the others slide aside to open its slot, and dropping it back where it came from changes nothing.
+    // Our own drag instead of ListView's: the card itself follows the pointer freely (opaque, above the
+    // others), the others slide aside to open its slot, it glides into that slot when dropped, and dropping
+    // it back where it came from changes nothing.
     // Positions are taken once when the drag starts; everything moves by Translation, and the collection
     // is only reordered on release.
 
@@ -186,7 +187,8 @@ public sealed partial class SettingsWindow : Window
     private bool _dragging;
     private int _dragFrom, _dragTo;
     private double _dragStartY;          // pointer, in panel coordinates, when the drag started
-    private double _dragViewportY;       // last pointer position over the list (for auto-scroll)
+    private double _dragViewportX, _dragViewportY; // last pointer position over the list (for auto-scroll)
+    private bool _dropping;              // the dropped card is gliding into its slot
     private (ListViewItem? Container, double Top, double Height)[] _slots = [];
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _autoScroll;
 
@@ -204,7 +206,7 @@ public sealed partial class SettingsWindow : Window
     private void OnCardPointerPressed(object sender, PointerRoutedEventArgs e)
     {
         _pressedItem = null;
-        if (_dragging || !e.GetCurrentPoint(HotkeysPage).Properties.IsLeftButtonPressed) return;
+        if (_dragging || _dropping || !e.GetCurrentPoint(HotkeysPage).Properties.IsLeftButtonPressed) return;
         bool onHeader = false;
         for (var o = e.OriginalSource as DependencyObject; o != null && o is not ListViewItem; o = VisualTreeHelper.GetParent(o))
         {
@@ -225,6 +227,7 @@ public sealed partial class SettingsWindow : Window
             if (Math.Abs(point.Y - _pressPoint.Y) < DragThreshold && Math.Abs(point.X - _pressPoint.X) < DragThreshold) return;
             if (!BeginDrag(e)) return;
         }
+        _dragViewportX = point.X;
         _dragViewportY = point.Y;
         UpdateDrag();
         e.Handled = true;
@@ -234,8 +237,8 @@ public sealed partial class SettingsWindow : Window
     {
         _pressedItem = null;
         if (!_dragging) return;
-        HotkeysPage.ReleasePointerCapture(e.Pointer);
         EndDrag(commit: true);
+        HotkeysPage.ReleasePointerCapture(e.Pointer);
         e.Handled = true;
     }
 
@@ -262,6 +265,9 @@ public sealed partial class SettingsWindow : Window
         }
         if (_slots[_dragFrom].Container is not { } dragged) return false;
         Canvas.SetZIndex(dragged, 1);
+        // The card fill is translucent (over Mica): lifted over the other cards it needs an opaque base.
+        if (Application.Current.Resources.TryGetValue("SolidBackgroundFillColorBaseBrush", out var solid) && solid is Brush brush)
+            dragged.Background = brush;
 
         _dragStartY = PanelY(e.GetCurrentPoint(HotkeysPage).Position.Y);
         _dragging = true;
@@ -281,7 +287,9 @@ public sealed partial class SettingsWindow : Window
         double minDy = _slots[0].Container != null ? _slots[0].Top - from.Top : double.NegativeInfinity;
         double maxDy = _slots[last].Container != null ? _slots[last].Top + _slots[last].Height - (from.Top + from.Height) : double.PositiveInfinity;
         dy = Math.Clamp(dy, Math.Min(0, minDy), Math.Max(0, maxDy));
-        from.Container!.Translation = new System.Numerics.Vector3(0, (float)dy, 0);
+        // Sideways it simply follows the pointer; only the vertical position picks the slot.
+        float dx = (float)(_dragViewportX - _pressPoint.X);
+        from.Container!.Translation = new System.Numerics.Vector3(dx, (float)dy, 0);
 
         // The slot it would drop into: past every card whose middle its own middle has crossed.
         double middle = from.Top + dy + from.Height / 2;
@@ -325,22 +333,51 @@ public sealed partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// Drops the card: the collection is reordered and every card's offset cleared in the same frame, so
-    /// nothing jumps (the list's own reorder animations are off for that one layout pass).
+    /// Drops the card: it glides into the slot it was over, then the collection is reordered and every
+    /// card's offset cleared in the same frame, so nothing jumps (the list's own reorder animations are
+    /// off for that one layout pass).
     /// </summary>
     private void EndDrag(bool commit)
     {
+        if (!_dragging) return; // released and capture-lost both end it
         _dragging = false;
         _pressedItem = null;
         _autoScroll?.Stop();
+        if (!commit) _dragTo = _dragFrom;
+
+        // Where its slot is, relative to where it started: past the cards it displaced.
+        double slotDy = 0;
+        for (int i = Math.Min(_dragFrom, _dragTo); i <= Math.Max(_dragFrom, _dragTo); i++)
+            if (i != _dragFrom && _slots[i].Container != null) slotDy += _dragTo > _dragFrom ? _slots[i].Height : -_slots[i].Height;
+        if (_slots[_dragFrom].Container is { } dragged)
+        {
+            _dropping = true;
+            dragged.TranslationTransition = new Vector3Transition { Duration = TimeSpan.FromMilliseconds(150) };
+            dragged.Translation = new System.Numerics.Vector3(0, (float)slotDy, 0);
+            var settle = DispatcherQueue.CreateTimer();
+            settle.Interval = TimeSpan.FromMilliseconds(160);
+            settle.IsRepeating = false;
+            settle.Tick += (_, _) =>
+            {
+                _dropping = false;
+                FinishDrop();
+            };
+            settle.Start();
+        }
+        else FinishDrop();
+    }
+
+    private void FinishDrop()
+    {
         var transitions = HotkeysPage.ItemContainerTransitions;
-        bool move = commit && _dragTo != _dragFrom;
+        bool move = _dragTo != _dragFrom;
         if (move) HotkeysPage.ItemContainerTransitions = [];
         foreach (var (container, _, _) in _slots)
         {
             if (container == null) continue;
             container.TranslationTransition = null;
             container.Translation = default;
+            container.ClearValue(Control.BackgroundProperty); // back to the style's transparent
             Canvas.SetZIndex(container, 0);
         }
         _slots = [];
