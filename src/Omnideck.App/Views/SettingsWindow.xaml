@@ -577,7 +577,7 @@
                                                     BorderThickness="1.5"
                                                     CornerRadius="5"
                                                     Visibility="{x:Bind KeyVisibility}">
-                                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Text="{x:Bind KeyLabel}" />
+                                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Text="{x:Bind KeyLabel}" TextLineBounds="Tight" />
                                                 </Border>
                                             </Grid>
                                             <TextBlock Grid.Row="1" Style="{StaticResource BodyStrongTextBlockStyle}" Text="{x:Bind Title}" />

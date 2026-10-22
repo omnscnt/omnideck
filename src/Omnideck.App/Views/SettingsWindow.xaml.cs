@@ -591,7 +591,16 @@ public sealed partial class SettingsWindow : Window
         if (FindNamed(LockLightPicker, "MoreEntriesPanel") is UIElement more) more.Visibility = Visibility.Collapsed;
         if (FindNamed(LockLightPicker, "RootGrid") is Grid root) root.Padding = new Thickness(0);
         if (FindNamed(LockLightPicker, "ThirdDimensionSliderGrid") is Grid slider) slider.Margin = new Thickness(0);
+        // The spectrum pops a tooltip with the colour's name while picking: keep it from showing.
+        if (FindNamed(LockLightPicker, "SelectionEllipse") is FrameworkElement ellipse && ToolTipService.GetToolTip(ellipse) is ToolTip tip)
+        {
+            tip.Opacity = 0;
+            tip.Opened -= CloseToolTip;
+            tip.Opened += CloseToolTip;
+        }
     }
+
+    private static void CloseToolTip(object sender, RoutedEventArgs e) => ((ToolTip)sender).IsOpen = false;
 
     private static FrameworkElement? FindNamed(DependencyObject parent, string name)
     {

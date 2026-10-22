@@ -44,11 +44,12 @@ public sealed class VolumeOsdView
         float k = layout.Height / BaseHeight;
         using var format = new CanvasTextFormat { FontFamily = TextFont, FontSize = layout.TextSize, WordWrapping = CanvasWordWrapping.NoWrap };
         using var text = new CanvasTextLayout(_device, content.Text, format, 10000, 1000);
-        float width = 2 * Pad * k + IconWidth(content, k) + TextGap * k + (float)Math.Ceiling(text.LayoutBounds.Width) + 1;
+        float width = (2 * Pad + TextEndPad) * k + IconWidth(content, k) + TextGap * k + (float)Math.Ceiling(text.LayoutBounds.Width) + 1;
         return Math.Clamp(width, layout.Height * 2, MaxTextBoxWidth);
     }
 
-    private const float TextGap = 12, KeyCapHeight = 20;
+    // TextEndPad: extra room after the text, so it doesn't run up to the rounded end of the backing.
+    private const float TextGap = 12, TextEndPad = 6, KeyCapHeight = 20;
 
     /// <summary>How wide the icon spot is: an app icon, a key cap, a glyph by its ink, or the speaker.</summary>
     private float IconWidth(OsdContent content, float k)
@@ -206,7 +207,7 @@ public sealed class VolumeOsdView
     {
         using var format = KeyCapFormat(k, withLight);
         using var text = new CanvasTextLayout(_device, label, format, 1000, 100);
-        float min = (KeyCapHeight + (withLight ? 3 : 0)) * k;
+        float min = (KeyCapHeight + (withLight ? 6 : 0)) * k;
         return Math.Max(min, (float)text.DrawBounds.Width + (withLight ? 10 + LightInset : 10) * k);
     }
 
@@ -223,8 +224,7 @@ public sealed class VolumeOsdView
         ds.DrawRoundedRectangle(Inflate(cap, -stroke / 2), r, r, fore(0.9), stroke);
 
         bool withLight = lit != null;
-        float inset = withLight ? LightInset * k : 0;
-        var labelArea = new Rect(cap.X, cap.Y + inset * 0.6, Math.Max(1, cap.Width - inset * 0.6), Math.Max(1, cap.Height - inset * 0.6));
+        var labelArea = cap; // centred on the whole key; the light sits in the corner, clear of a one- or two-letter label
         using var format = KeyCapFormat(k, withLight);
         using var text = new CanvasTextLayout(_device, label, format, 1000, 100);
         var ink = text.DrawBounds;
@@ -234,9 +234,9 @@ public sealed class VolumeOsdView
 
         if (lit is bool on)
         {
-            var center = new Vector2((float)cap.Right - 4.6f * k, (float)cap.Y + 4.6f * k);
+            var center = new Vector2((float)cap.Right - 4.3f * k, (float)cap.Y + 4.3f * k);
             var off = lightTheme ? Color.FromArgb(255, 0xA8, 0xA8, 0xA8) : Color.FromArgb(255, 0x6E, 0x6E, 0x6E);
-            ds.FillCircle(center, 2.1f * k, on ? lightColor : off);
+            ds.FillCircle(center, 1.9f * k, on ? lightColor : off);
         }
     }
 
