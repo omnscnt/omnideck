@@ -7,12 +7,15 @@ namespace Omnideck.ViewModels;
 /// One kind of on-screen notice on the OSD page: a tile that switches it on or off. Its icon is a
 /// Fluent glyph, or (for keys) a key cap with a label, like the notice itself shows.
 /// </summary>
-public sealed partial class OsdKindTile(string title, string caption, string? glyph, string? keyLabel, Action changed) : ObservableObject
+public sealed partial class OsdKindTile(string title, string caption, string? glyph, string? keyLabel, Action changed, double keyWidth = 24) : ObservableObject
 {
     public string Title { get; } = title;
     public string Caption { get; } = caption;
     public string Glyph { get; } = glyph ?? "";
     public string KeyLabel { get; } = keyLabel ?? "";
+
+    /// <summary>The key cap's width, as on a keyboard: Caps Lock is wider than Num Lock.</summary>
+    public double KeyWidth { get; } = keyWidth;
 
     public Visibility GlyphVisibility => glyph != null ? Visibility.Visible : Visibility.Collapsed;
     public Visibility KeyVisibility => keyLabel != null ? Visibility.Visible : Visibility.Collapsed;

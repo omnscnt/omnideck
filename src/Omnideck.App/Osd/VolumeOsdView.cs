@@ -54,7 +54,7 @@ public sealed class VolumeOsdView
     /// <summary>How wide the icon spot is: an app icon, a key cap, a glyph by its ink, or the speaker.</summary>
     private float IconWidth(OsdContent content, float k)
     {
-        if (content.KeyLabel != null) return KeyCapWidth(content.KeyLabel, content.KeyOn != null, k);
+        if (content.KeyLabel != null) return KeyCapWidth(content.KeyLabel, content.KeyOn != null, content.KeyUnits, k);
         if (content.Icon != null) return IconSize * k;
         return content.Glyph != null ? GlyphInkWidth(content.Glyph, GlyphSize * k) : SpeakerInkWidth(GlyphSize * k);
     }
@@ -196,19 +196,16 @@ public sealed class VolumeOsdView
         WordWrapping = CanvasWordWrapping.NoWrap,
     };
 
-    /// <summary>Room the light takes in the top-right corner, so the label sits clear of it.</summary>
-    private const float LightInset = 5;
 
     /// <summary>
-    /// At least square (a little wider with a light); wider for a longer label ("EN"), with room on both
-    /// sides of it.
+    /// As wide as the key on a keyboard (<paramref name="units"/> times its height: Num Lock square, Caps Lock
+    /// wide), and wider still if a label ("EN") needs the room.
     /// </summary>
-    private float KeyCapWidth(string label, bool withLight, float k)
+    private float KeyCapWidth(string label, bool withLight, float units, float k)
     {
         using var format = KeyCapFormat(k, withLight);
         using var text = new CanvasTextLayout(_device, label, format, 1000, 100);
-        float min = (KeyCapHeight + (withLight ? 6 : 0)) * k;
-        return Math.Max(min, (float)text.DrawBounds.Width + (withLight ? 10 + LightInset : 10) * k);
+        return Math.Max(KeyCapHeight * units * k, (float)text.DrawBounds.Width + 10 * k);
     }
 
     /// <summary>

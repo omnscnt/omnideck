@@ -545,7 +545,7 @@ public sealed partial class SettingsWindow : Window
     {
         _osdVolume = new("Volume", "Volume set by a hotkey", "", null, ApplyOsd);
         _osdMic = new("Microphone", "Muted or unmuted", "", null, ApplyOsd);
-        _osdCaps = new("Caps Lock", "Turning on or off", null, "A", ApplyOsd);
+        _osdCaps = new("Caps Lock", "Turning on or off", null, "A", ApplyOsd, keyWidth: 40);
         _osdNum = new("Num Lock", "Turning on or off", null, "1", ApplyOsd);
         _osdScroll = new("Scroll Lock", "Turning on or off", null, "↕", ApplyOsd);
         _osdLayout = new("Keyboard layout", "Switching the language", "", null, ApplyOsd);
@@ -639,7 +639,7 @@ public sealed partial class SettingsWindow : Window
         double scale = (Content as FrameworkElement)?.XamlRoot?.RasterizationScale ?? 1.0;
         var master = App.Audio.Master;
         ShowPreview(OsdPreviewVolume, new OsdContent("master", null, 0, master?.Volume ?? 0.5f, master?.IsMuted ?? false), layout, light, scale);
-        ShowPreview(OsdPreviewLock, OsdContent.KeyNotice("lock", "A", true, "Caps Lock on"), layout, light, scale);
+        ShowPreview(OsdPreviewLock, OsdContent.KeyNotice("lock", "A", true, "Caps Lock on", units: 1.75f), layout, light, scale);
         ShowPreview(OsdPreviewLayout, OsdContent.KeyNotice("layout", "EN", null, "English (United States)"), layout, light, scale);
     }
 

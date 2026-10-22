@@ -74,13 +74,15 @@ public readonly record struct OsdLayout(float Width, float Height, float Backing
 /// <param name="Text">Shown instead of the bar and number (microphone, lock keys, layout, device).</param>
 /// <param name="KeyLabel">Draws a key cap with this label as the icon (lock keys, layout), instead of a glyph.</param>
 /// <param name="KeyOn">The key cap's light: on, off, or none (null).</param>
+/// <param name="KeyUnits">The key cap's width in key units (Caps Lock is wider than Num Lock).</param>
 public sealed record OsdContent(
     string Key, byte[]? Icon, int IconSize, float Volume, bool Muted,
-    string? Glyph = null, string? Text = null, string? KeyLabel = null, bool? KeyOn = null)
+    string? Glyph = null, string? Text = null, string? KeyLabel = null, bool? KeyOn = null, float KeyUnits = 1)
 {
     public static OsdContent Message(string key, string glyph, string text, bool dimmed = false) =>
         new(key, null, 0, 0, dimmed, glyph, text);
 
-    public static OsdContent KeyNotice(string key, string label, bool? lit, string text, bool dimmed = false) =>
-        new(key, null, 0, 0, dimmed, null, text, label, lit);
+    /// <param name="units">The key's width in key units, as on a keyboard (Caps Lock is 1.75, most keys 1).</param>
+    public static OsdContent KeyNotice(string key, string label, bool? lit, string text, bool dimmed = false, float units = 1) =>
+        new(key, null, 0, 0, dimmed, null, text, label, lit, units);
 }

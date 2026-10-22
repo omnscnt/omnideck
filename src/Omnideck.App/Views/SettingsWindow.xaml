@@ -76,7 +76,7 @@
                 </NavigationViewItem>
                 <NavigationViewItem Content="OSD" Tag="osd">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE767;" />
+                        <FontIcon Glyph="&#xE7F4;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
@@ -571,7 +571,7 @@
                                             <Grid Height="24" Margin="0,0,0,8" HorizontalAlignment="Left">
                                                 <FontIcon FontSize="22" Glyph="{x:Bind Glyph}" Visibility="{x:Bind GlyphVisibility}" />
                                                 <Border
-                                                    MinWidth="24"
+                                                    Width="{x:Bind KeyWidth}"
                                                     Padding="5,0"
                                                     BorderBrush="{ThemeResource TextFillColorPrimaryBrush}"
                                                     BorderThickness="1.5"
