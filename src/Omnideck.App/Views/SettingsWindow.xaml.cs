@@ -43,6 +43,7 @@ public sealed partial class SettingsWindow : Window
         Nav.SelectedItem = HotkeysItem;
         Nav.Loaded += (_, _) => FloatPane();
         AutoStartSwitch.IsOn = AutoStart.IsEnabled;
+        LogVolumeSwitch.IsOn = App.Instance.LogarithmicVolume;
         LoadWidgetSettings();
         LoadOsdSettings();
         LoadUpdateSettings();
@@ -609,6 +610,11 @@ public sealed partial class SettingsWindow : Window
     private void OnAutoStartToggled(object sender, RoutedEventArgs e)
     {
         if (AutoStartSwitch.IsOn != AutoStart.IsEnabled) AutoStart.SetEnabled(AutoStartSwitch.IsOn);
+    }
+
+    private void OnLogVolumeToggled(object sender, RoutedEventArgs e)
+    {
+        if (LogVolumeSwitch.IsOn != App.Instance.LogarithmicVolume) App.Instance.LogarithmicVolume = LogVolumeSwitch.IsOn;
     }
 
     private async void OnWindowsSoundClick(object sender, RoutedEventArgs e) =>

@@ -58,7 +58,9 @@ public sealed class AudioApp : IVolumeControl
         foreach (var session in Snapshot()) Try(() => session.SetVolume(volume, context));
     }
 
-    public void AdjustVolume(float delta, Guid context = default) => SetVolume(Math.Clamp(Volume + delta, 0f, 1f), context);
+    /// <summary>Steps by <paramref name="delta"/> of the slider (see <see cref="VolumeCurve"/>), as the mixer shows it.</summary>
+    public void AdjustVolume(float delta, Guid context = default) =>
+        SetVolume(VolumeCurve.ToScalar(VolumeCurve.ToPosition(Volume) + delta), context);
 
     public void SetMute(bool mute, Guid context = default)
     {

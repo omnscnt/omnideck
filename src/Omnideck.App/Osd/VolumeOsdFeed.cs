@@ -72,9 +72,9 @@ public sealed class VolumeOsdFeed
 
     private OsdContent ContentFor(IVolumeControl target) => target switch
     {
-        AudioApp app => new OsdContent(app.Key, IconFor(app.ExecutablePath), IconPixels, app.Volume, app.IsMuted),
+        AudioApp app => new OsdContent(app.Key, IconFor(app.ExecutablePath), IconPixels, VolumeCurve.ToPosition(app.Volume), app.IsMuted),
         MasterVolume master => new OsdContent("master:" + master.DeviceId, null, 0, master.Volume, master.IsMuted),
-        AppGroup group => new OsdContent("others", null, 0, group.Volume, group.IsMuted),
+        AppGroup group => new OsdContent("others", null, 0, VolumeCurve.ToPosition(group.Volume), group.IsMuted),
         _ => new OsdContent("?", null, 0, target.Volume, target.IsMuted),
     };
 

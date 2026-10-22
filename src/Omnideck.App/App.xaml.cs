@@ -70,6 +70,7 @@ public partial class App : Application
         _audio = await Task.Run(() => new AudioService());
 
         _settings = SettingsStore.Load();
+        VolumeCurve.Logarithmic = _settings.LogarithmicVolume;
         InstallLayout.RenameLegacyLauncher(); // before autostart: it points at the launcher
         AutoStart.Migrate();
         var media = new MediaSessionService();
@@ -193,6 +194,19 @@ public partial class App : Application
     }
 
     public void PreviewVolumeOsd() => _osdFeed?.Preview();
+
+    /// <summary>The volume curve for app sliders, hotkey steps and the indicator; switching re-reads the mixer.</summary>
+    public bool LogarithmicVolume
+    {
+        get => _settings.LogarithmicVolume;
+        set
+        {
+            _settings.LogarithmicVolume = value;
+            VolumeCurve.Logarithmic = value;
+            SettingsStore.Save(_settings);
+            if (_flyout != null) foreach (var app in _flyout.ViewModel.Apps) app.Resync();
+        }
+    }
 
     // ---- updates ----------------------------------------------------------------------------------
 

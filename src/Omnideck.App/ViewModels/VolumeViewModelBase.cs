@@ -25,6 +25,7 @@ public abstract partial class VolumeViewModelBase : ObservableObject
     public Microsoft.UI.Xaml.Visibility MutedVisibility =>
         IsMuted ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
 
+    /// <param name="volume">Slider position 0..1 (apps may map it through <see cref="VolumeCurve"/>).</param>
     protected VolumeViewModelBase(DispatcherQueue dispatcher, float volume, bool isMuted)
     {
         _dispatcher = dispatcher;
@@ -44,6 +45,9 @@ public abstract partial class VolumeViewModelBase : ObservableObject
     [ObservableProperty]
     private double _level;
 
+    /// <summary>What the volume does to the signal (0..1); for apps the curve applies.</summary>
+    protected virtual double OutputScale => Volume / 100.0;
+
     /// <summary>Raw pre-volume peak from Core Audio.</summary>
     protected abstract float ReadPeak();
 
@@ -51,13 +55,17 @@ public abstract partial class VolumeViewModelBase : ObservableObject
     public void TickMeter()
     {
         // Square root ≈ perceived loudness: quiet audio still shows, loud audio still tops out.
-        double target = IsMuted ? 0 : Math.Sqrt(ReadPeak() * Volume / 100.0);
+        double target = IsMuted ? 0 : Math.Sqrt(ReadPeak() * OutputScale);
         double next = target >= Level ? target : Level * 0.8 + target * 0.2;
         Level = next < 0.002 ? 0 : next;
     }
 
     public void ResetMeter() => Level = 0;
 
+    /// <summary>The control's volume as a slider position; apps follow the volume curve, the device doesn't.</summary>
+    protected virtual float ToPosition(float volume) => volume;
+
+    /// <param name="volume">Slider position 0..1.</param>
     protected abstract void ApplyVolume(float volume);
 
     protected abstract void ApplyMute(bool mute);
@@ -82,7 +90,7 @@ public abstract partial class VolumeViewModelBase : ObservableObject
     protected void OnCoreVolumeChanged(object? sender, VolumeChangedEventArgs e)
     {
         if (e.Context == UiContext) return;
-        _dispatcher.TryEnqueue(() => Sync(e.Volume, e.IsMuted));
+        _dispatcher.TryEnqueue(() => Sync(ToPosition(e.Volume), e.IsMuted));
     }
 
     protected void Sync(float volume, bool isMuted)

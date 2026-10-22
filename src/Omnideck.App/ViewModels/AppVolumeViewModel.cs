@@ -22,7 +22,7 @@ public sealed partial class AppVolumeViewModel : VolumeViewModelBase, IDisposabl
     public string FallbackGlyph => App.IsSystemSounds ? "" : "";
 
     public AppVolumeViewModel(AudioApp app, DispatcherQueue dispatcher)
-        : base(dispatcher, app.Volume, app.IsMuted)
+        : base(dispatcher, VolumeCurve.ToPosition(app.Volume), app.IsMuted)
     {
         App = app;
         app.VolumeChanged += OnCoreVolumeChanged;
@@ -37,7 +37,14 @@ public sealed partial class AppVolumeViewModel : VolumeViewModelBase, IDisposabl
 
     protected override float ReadPeak() => App.Peak;
 
-    protected override void ApplyVolume(float volume) => App.SetVolume(volume, UiContext);
+    protected override void ApplyVolume(float volume) => App.SetVolume(VolumeCurve.ToScalar(volume), UiContext);
+
+    protected override float ToPosition(float volume) => VolumeCurve.ToPosition(volume);
+
+    protected override double OutputScale => VolumeCurve.ToScalar((float)(Volume / 100.0));
+
+    /// <summary>Re-reads the volume, e.g. after the volume curve was switched.</summary>
+    public void Resync() => Sync(VolumeCurve.ToPosition(App.Volume), App.IsMuted);
 
     protected override void ApplyMute(bool mute) => App.SetMute(mute, UiContext);
 

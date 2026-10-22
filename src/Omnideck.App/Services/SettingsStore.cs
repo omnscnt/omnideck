@@ -14,6 +14,9 @@ public sealed class AppSettings
 
     public VolumeOsdSettings VolumeOsd { get; set; } = new();
 
+    /// <summary>App sliders follow loudness (decibels) instead of the raw volume value, like EarTrumpet.</summary>
+    public bool LogarithmicVolume { get; set; }
+
     public UpdateSettings Updates { get; set; } = new();
 }
 

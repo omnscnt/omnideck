@@ -764,6 +764,29 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Logarithmic app volume" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="App sliders follow loudness as you hear it, so quiet levels get more room. Hotkey steps and the indicator follow too. The device volume is already scaled this way by Windows." />
+                                </StackPanel>
+                                <ToggleSwitch
+                                    x:Name="LogVolumeSwitch"
+                                    MinWidth="0"
+                                    Grid.Column="1" HorizontalAlignment="Right"
+                                    AutomationProperties.Name="Logarithmic app volume"
+                                    Toggled="OnLogVolumeToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Updates" />
                                     <TextBlock
                                         x:Name="UpdateStatusText"
