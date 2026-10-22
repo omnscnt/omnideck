@@ -10,7 +10,7 @@
     <RootNamespace>Omnisound.Launcher</RootNamespace>
     <AssemblyTitle>omnisound.</AssemblyTitle>
     <Product>omnisound.</Product>
-    <Version>0.3.1</Version>
+    <Version>0.3.2</Version>
     <ApplicationIcon>..\Omnisound.App\Assets\omnisound.ico</ApplicationIcon>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
