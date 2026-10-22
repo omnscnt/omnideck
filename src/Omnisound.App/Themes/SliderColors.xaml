@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Slider track colours for hover and press, matching the resting look (filled part bright, rest dim)
+     instead of WinUI's accent-based ones, which with a grey accent swap brightness on hover. The slider
+     template looks these keys up from the slider upwards, so this dictionary is merged into each window's
+     root; in App.xaml the framework's own keys win. -->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Default">
+            <SolidColorBrush x:Key="SliderTrackFill" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#40FFFFFF" />
+            <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#33FFFFFF" />
+            <SolidColorBrush x:Key="SliderTrackValueFill" Color="#FFAEAEAE" />
+            <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#FFBEBEBE" />
+            <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#FF9E9E9E" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="SliderTrackFill" Color="#26000000" />
+            <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#33000000" />
+            <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#26000000" />
+            <SolidColorBrush x:Key="SliderTrackValueFill" Color="#FF5C5C5C" />
+            <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#FF4C4C4C" />
+            <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#FF6C6C6C" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

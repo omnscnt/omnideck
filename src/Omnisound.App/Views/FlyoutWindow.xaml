@@ -13,6 +13,9 @@
         Every slider row shares the same four columns: level meter | icon button (mute) | slider | percent.
     -->
     <Grid x:Name="RootGrid" KeyDown="OnRootKeyDown">
+        <Grid.Resources>
+            <ResourceDictionary Source="ms-appx:///Themes/SliderColors.xaml" />
+        </Grid.Resources>
         <Grid x:Name="Card" VerticalAlignment="Top">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />

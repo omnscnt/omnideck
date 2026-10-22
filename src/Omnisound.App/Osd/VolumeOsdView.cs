@@ -16,7 +16,7 @@ public sealed class VolumeOsdView
 {
     // DIPs. Inner sizes are for a 48-high content box and scale with the configured height.
     public const float ShadowMargin = 20;
-    private const float BaseHeight = 48, Pad = 16, IconSize = 22, BarGap = 10, BarHeight = 4, FontSize = 12, GlyphSize = 18;
+    private const float BaseHeight = 48, Pad = 16, IconSize = 22, BarGap = 10, BarHeight = 4, GlyphSize = 18;
 
     private static readonly string TextFont = FontExists("Segoe UI Variable Text") ? "Segoe UI Variable Text" : "Segoe UI";
     private static readonly string IconFont = FontExists("Segoe Fluent Icons") ? "Segoe Fluent Icons" : "Segoe MDL2 Assets";
@@ -57,12 +57,17 @@ public sealed class VolumeOsdView
 
         using var format = new CanvasTextFormat
         {
-            FontFamily = TextFont, FontSize = FontSize * k,
-            VerticalAlignment = CanvasVerticalAlignment.Center, WordWrapping = CanvasWordWrapping.NoWrap,
+            FontFamily = TextFont, FontSize = layout.TextSize, WordWrapping = CanvasWordWrapping.NoWrap,
         };
-        // The number column is exactly as wide as "100", so the bar never changes length with the value.
-        float numberWidth;
-        using (var widest = new CanvasTextLayout(_device, "100", format, 1000, 100)) numberWidth = (float)Math.Ceiling(widest.LayoutBounds.Width);
+        // The number column is exactly as wide as "100", so the bar never changes length with the value; its
+        // ink (digits are all as tall) gives the offset that centres the digits on the bar, not the line box.
+        float numberWidth, digitsTop, digitsHeight;
+        using (var widest = new CanvasTextLayout(_device, "100", format, 1000, 100))
+        {
+            numberWidth = (float)Math.Ceiling(widest.LayoutBounds.Width);
+            digitsTop = (float)widest.DrawBounds.Y;
+            digitsHeight = (float)widest.DrawBounds.Height;
+        }
 
         using (var ds = _target.CreateDrawingSession())
         {
@@ -108,8 +113,8 @@ public sealed class VolumeOsdView
                 if (fill > 0.5f)
                     ds.FillRoundedRectangle(new Rect(barLeft, barY, Math.Max(fill, barHeight), barHeight), barHeight / 2, barHeight / 2, Fore(content.Muted ? 0.35 : 1));
 
-                ds.DrawText($"{(int)Math.Round(content.Volume * 100)}", new Rect(numberLeft, box.Y, numberWidth + 2, box.Height),
-                    Fore(content.Muted ? 0.45 : 0.85), format);
+                float numberY = Snap(barY + barHeight / 2 - digitsHeight / 2 - digitsTop, scale);
+                ds.DrawText($"{(int)Math.Round(content.Volume * 100)}", numberLeft, numberY, Fore(content.Muted ? 0.45 : 0.85), format);
             }
         }
         return _target.GetPixelBytes();

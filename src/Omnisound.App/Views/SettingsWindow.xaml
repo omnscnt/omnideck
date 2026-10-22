@@ -8,6 +8,9 @@
     Title="omnisound. Settings">
 
     <Grid>
+        <Grid.Resources>
+            <ResourceDictionary Source="ms-appx:///Themes/SliderColors.xaml" />
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -88,15 +91,11 @@
             </NavigationView.FooterMenuItems>
 
             <Grid x:Name="PageHost" SizeChanged="OnPageHostSizeChanged">
-                <!-- Hotkeys page: the list scrolls itself so drag-reordering can auto-scroll. -->
+                <!-- Hotkeys page: a ListView for its scrolling; cards are reordered by our own drag (SettingsWindow.Reorder). -->
                 <ListView
                     x:Name="HotkeysPage"
                     VerticalAlignment="Top"
                     Padding="36,8,36,36"
-                    AllowDrop="True"
-                    CanDragItems="True"
-                    CanReorderItems="True"
-                    DragItemsCompleted="OnHotkeysReordered"
                     IsItemClickEnabled="False"
                     ItemsSource="{x:Bind Hotkeys.Items}"
                     SelectionMode="None">
@@ -145,54 +144,11 @@
                             <Setter Property="MinHeight" Value="0" />
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                             <Setter Property="VerticalContentAlignment" Value="Stretch" />
-                            <!-- Bare container: the card draws its own surface and hover. Only the drag states
-                                 that matter are kept (hide the dragged card's slot, open a gap at the drop
-                                 point); the stock presenter also shrinks every other card while dragging. -->
+                            <!-- Bare container: the card draws its own surface and hover. -->
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListViewItem">
                                         <Grid x:Name="Root" Background="Transparent">
-                                            <VisualStateManager.VisualStateGroups>
-                                                <VisualStateGroup x:Name="DragStates">
-                                                    <VisualState x:Name="NotDragging" />
-                                                    <VisualState x:Name="Dragging" />
-                                                    <VisualState x:Name="DraggingTarget" />
-                                                    <VisualState x:Name="MultipleDraggingPrimary" />
-                                                    <VisualState x:Name="MultipleDraggingSecondary" />
-                                                    <VisualState x:Name="DraggedPlaceholder">
-                                                        <VisualState.Setters>
-                                                            <Setter Target="Root.Opacity" Value="0" />
-                                                        </VisualState.Setters>
-                                                    </VisualState>
-                                                    <VisualState x:Name="Reordering" />
-                                                    <VisualState x:Name="ReorderingTarget" />
-                                                    <VisualState x:Name="MultipleReorderingPrimary" />
-                                                    <VisualState x:Name="ReorderedPlaceholder">
-                                                        <VisualState.Setters>
-                                                            <Setter Target="Root.Opacity" Value="0" />
-                                                        </VisualState.Setters>
-                                                    </VisualState>
-                                                    <VisualState x:Name="DragOver" />
-                                                </VisualStateGroup>
-                                                <VisualStateGroup x:Name="ReorderHintStates">
-                                                    <VisualStateGroup.Transitions>
-                                                        <VisualTransition GeneratedDuration="0:0:0.2" To="NoReorderHint" />
-                                                    </VisualStateGroup.Transitions>
-                                                    <VisualState x:Name="NoReorderHint" />
-                                                    <VisualState x:Name="BottomReorderHint">
-                                                        <Storyboard>
-                                                            <DragOverThemeAnimation Direction="Bottom" TargetName="Root" ToOffset="{ThemeResource ListViewItemReorderHintThemeOffset}" />
-                                                        </Storyboard>
-                                                    </VisualState>
-                                                    <VisualState x:Name="TopReorderHint">
-                                                        <Storyboard>
-                                                            <DragOverThemeAnimation Direction="Top" TargetName="Root" ToOffset="{ThemeResource ListViewItemReorderHintThemeOffset}" />
-                                                        </Storyboard>
-                                                    </VisualState>
-                                                    <VisualState x:Name="RightReorderHint" />
-                                                    <VisualState x:Name="LeftReorderHint" />
-                                                </VisualStateGroup>
-                                            </VisualStateManager.VisualStateGroups>
                                             <ContentPresenter
                                                 HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
                                                 VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
@@ -664,6 +620,28 @@
                                     <Slider x:Name="OsdCornerSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Corner rounding"
                                         Maximum="100" Minimum="0" StepFrequency="5" ValueChanged="OnOsdSliderChanged" />
                                     <TextBlock x:Name="OsdCornerText" Width="40" VerticalAlignment="Center" TextAlignment="Right" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Number size" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Size of the volume percentage next to the bar." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                                    <Slider x:Name="OsdTextSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Number size"
+                                        Maximum="24" Minimum="10" StepFrequency="1" ValueChanged="OnOsdSliderChanged" />
+                                    <TextBlock x:Name="OsdTextText" Width="40" VerticalAlignment="Center" TextAlignment="Right" />
                                 </StackPanel>
                             </Grid>
                         </Border>

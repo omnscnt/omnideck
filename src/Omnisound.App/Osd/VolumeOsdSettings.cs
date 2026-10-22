@@ -24,17 +24,21 @@ public sealed class VolumeOsdSettings
     /// <summary>Corner rounding as a percentage of the fully round (pill) shape.</summary>
     public int CornerPercent { get; set; } = 100;
 
-    public const int MinWidth = 160, MaxWidth = 480, MinHeight = 32, MaxHeight = 72, MinBacking = -8, MaxBacking = 24;
+    /// <summary>Size of the percentage, in DIPs.</summary>
+    public int TextSize { get; set; } = 14;
+
+    public const int MinWidth = 160, MaxWidth = 480, MinHeight = 32, MaxHeight = 72, MinBacking = -8, MaxBacking = 24, MinTextSize = 10, MaxTextSize = 24;
 
     public OsdLayout ToLayout() => new(
         Math.Clamp(Width, MinWidth, MaxWidth), Math.Clamp(Height, MinHeight, MaxHeight),
-        Math.Clamp(Backing, MinBacking, MaxBacking), Math.Clamp(CornerPercent, 0, 100));
+        Math.Clamp(Backing, MinBacking, MaxBacking), Math.Clamp(CornerPercent, 0, 100),
+        Math.Clamp(TextSize, MinTextSize, MaxTextSize));
 
     public VolumeOsdSettings Clone() => (VolumeOsdSettings)MemberwiseClone();
 }
 
-/// <summary>Sizes of one indicator in DIPs: the content box, the backing's extra margin, the corner rounding.</summary>
-public readonly record struct OsdLayout(float Width, float Height, float Backing, float CornerPercent);
+/// <summary>Sizes of one indicator in DIPs: the content box, the backing's extra margin, the corner rounding, the number.</summary>
+public readonly record struct OsdLayout(float Width, float Height, float Backing, float CornerPercent, float TextSize);
 
 /// <summary>What one indicator shows.</summary>
 /// <param name="Key">Identifies the target: a new key restarts the appear animation, the same one just updates.</param>

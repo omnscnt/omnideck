@@ -14,27 +14,19 @@
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Default">
                     <SolidColorBrush x:Key="OmnisoundTrackFill" Color="#33FFFFFF" />
-                    <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#40FFFFFF" />
-                    <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#33FFFFFF" />
                     <SolidColorBrush x:Key="OmnisoundTrackValueFill" Color="#FFAEAEAE" />
                     <SolidColorBrush x:Key="OmnisoundMeterTrack" Color="#1FFFFFFF" />
                     <SolidColorBrush x:Key="OmnisoundPaneStroke" Color="#1AFFFFFF" />
                     <SolidColorBrush x:Key="OmnisoundDashStroke" Color="#5CFFFFFF" />
                     <SolidColorBrush x:Key="OmnisoundTitleForeground" Color="#FFC8C8C8" />
-                    <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#FFBEBEBE" />
-                    <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#FF9E9E9E" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="OmnisoundTrackFill" Color="#26000000" />
-                    <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#33000000" />
-                    <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#26000000" />
                     <SolidColorBrush x:Key="OmnisoundTrackValueFill" Color="#FF5C5C5C" />
                     <SolidColorBrush x:Key="OmnisoundMeterTrack" Color="#14000000" />
                     <SolidColorBrush x:Key="OmnisoundPaneStroke" Color="#14000000" />
                     <SolidColorBrush x:Key="OmnisoundDashStroke" Color="#5C000000" />
                     <SolidColorBrush x:Key="OmnisoundTitleForeground" Color="#FF5C5C5C" />
-                    <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#FF4C4C4C" />
-                    <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#FF6C6C6C" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 

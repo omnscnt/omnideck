@@ -1,6 +1,8 @@
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media;
 using Omnisound.Core.Hotkeys;
 using Omnisound.Core.Media;
@@ -8,6 +10,7 @@ using Omnisound.Osd;
 using Omnisound.Services;
 using Omnisound.Taskbar;
 using Omnisound.ViewModels;
+using Windows.Foundation;
 using Windows.Graphics;
 
 namespace Omnisound.Views;
@@ -21,6 +24,7 @@ public sealed partial class SettingsWindow : Window
     {
         Hotkeys = hotkeys;
         InitializeComponent();
+        SetupReorder();
 
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
@@ -169,7 +173,199 @@ public sealed partial class SettingsWindow : Window
     /// <summary>Adds a blank hotkey above the add card; its card unfolds and starts recording (see HotkeyCard).</summary>
     private void OnAddClick(object sender, RoutedEventArgs e) => Hotkeys.AddDraft();
 
-    private void OnHotkeysReordered(ListViewBase sender, DragItemsCompletedEventArgs args) => Hotkeys.Save();
+    // ---- hotkey card reordering --------------------------------------------------------------------
+    // Our own drag instead of ListView's: the card itself follows the pointer (opaque, above the others),
+    // the others slide aside to open its slot, and dropping it back where it came from changes nothing.
+    // Positions are taken once when the drag starts; everything moves by Translation, and the collection
+    // is only reordered on release.
+
+    private const double DragThreshold = 6, CardGap = 4, AutoScrollZone = 48, AutoScrollStep = 10;
+
+    private HotkeyItemViewModel? _pressedItem;
+    private Point _pressPoint;
+    private bool _dragging;
+    private int _dragFrom, _dragTo;
+    private double _dragStartY;          // pointer, in panel coordinates, when the drag started
+    private double _dragViewportY;       // last pointer position over the list (for auto-scroll)
+    private (ListViewItem? Container, double Top, double Height)[] _slots = [];
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _autoScroll;
+
+
+    private void SetupReorder()
+    {
+        // handledEventsToo: the list item marks presses handled for its own selection logic.
+        HotkeysPage.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnCardPointerPressed), true);
+        HotkeysPage.AddHandler(UIElement.PointerMovedEvent, new PointerEventHandler(OnCardPointerMoved), true);
+        HotkeysPage.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler(OnCardPointerReleased), true);
+        HotkeysPage.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(OnCardPointerCaptureLost), true);
+    }
+
+    /// <summary>A press on a card's header (not on its buttons, switch or editor) may start a drag.</summary>
+    private void OnCardPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        _pressedItem = null;
+        if (_dragging || !e.GetCurrentPoint(HotkeysPage).Properties.IsLeftButtonPressed) return;
+        bool onHeader = false;
+        for (var o = e.OriginalSource as DependencyObject; o != null && o is not ListViewItem; o = VisualTreeHelper.GetParent(o))
+        {
+            if (o is Microsoft.UI.Xaml.Controls.Primitives.ButtonBase or ToggleSwitch or TextBox or ComboBox or Slider or NumberBox) return;
+            if (o is FrameworkElement { Name: "Header" }) onHeader = true;
+        }
+        if (!onHeader) return;
+        _pressedItem = (FindParent<ListViewItem>(e.OriginalSource as DependencyObject)?.Content) as HotkeyItemViewModel;
+        _pressPoint = e.GetCurrentPoint(HotkeysPage).Position;
+    }
+
+    private void OnCardPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        var point = e.GetCurrentPoint(HotkeysPage).Position;
+        if (!_dragging)
+        {
+            if (_pressedItem == null || !e.GetCurrentPoint(HotkeysPage).Properties.IsLeftButtonPressed) return;
+            if (Math.Abs(point.Y - _pressPoint.Y) < DragThreshold && Math.Abs(point.X - _pressPoint.X) < DragThreshold) return;
+            if (!BeginDrag(e)) return;
+        }
+        _dragViewportY = point.Y;
+        UpdateDrag();
+        e.Handled = true;
+    }
+
+    private void OnCardPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        _pressedItem = null;
+        if (!_dragging) return;
+        HotkeysPage.ReleasePointerCapture(e.Pointer);
+        EndDrag(commit: true);
+        e.Handled = true;
+    }
+
+    private void OnCardPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        if (_dragging) EndDrag(commit: true);
+    }
+
+    private bool BeginDrag(PointerRoutedEventArgs e)
+    {
+        var panel = HotkeysPage.ItemsPanelRoot;
+        _dragFrom = _dragTo = Hotkeys.Items.IndexOf(_pressedItem!);
+        if (panel == null || _dragFrom < 0 || !HotkeysPage.CapturePointer(e.Pointer)) return false;
+
+        // Where every card sits now (cards scrolled far out of view may have no container: they just don't move).
+        _slots = new (ListViewItem?, double, double)[Hotkeys.Items.Count];
+        for (int i = 0; i < _slots.Length; i++)
+        {
+            var container = HotkeysPage.ContainerFromIndex(i) as ListViewItem;
+            if (container == null) continue;
+            double top = container.TransformToVisual(panel).TransformPoint(default).Y;
+            _slots[i] = (container, top, container.ActualHeight + CardGap);
+            container.TranslationTransition = i == _dragFrom ? null : new Vector3Transition { Duration = TimeSpan.FromMilliseconds(170) };
+        }
+        if (_slots[_dragFrom].Container is not { } dragged) return false;
+        Canvas.SetZIndex(dragged, 1);
+
+        _dragStartY = PanelY(e.GetCurrentPoint(HotkeysPage).Position.Y);
+        _dragging = true;
+        return true;
+    }
+
+    /// <summary>A Y over the list in panel coordinates (they move with scrolling, the viewport doesn't).</summary>
+    private double PanelY(double viewportY) =>
+        HotkeysPage.TransformToVisual(HotkeysPage.ItemsPanelRoot).TransformPoint(new Point(0, viewportY)).Y;
+
+    private void UpdateDrag()
+    {
+        var from = _slots[_dragFrom];
+        int last = _slots.Length - 1;
+        // The card stays within the list: from the first slot's top to the last slot's bottom.
+        double dy = PanelY(_dragViewportY) - _dragStartY;
+        double minDy = _slots[0].Container != null ? _slots[0].Top - from.Top : double.NegativeInfinity;
+        double maxDy = _slots[last].Container != null ? _slots[last].Top + _slots[last].Height - (from.Top + from.Height) : double.PositiveInfinity;
+        dy = Math.Clamp(dy, Math.Min(0, minDy), Math.Max(0, maxDy));
+        from.Container!.Translation = new System.Numerics.Vector3(0, (float)dy, 0);
+
+        // The slot it would drop into: past every card whose middle its own middle has crossed.
+        double middle = from.Top + dy + from.Height / 2;
+        int to = _dragFrom;
+        for (int i = _dragFrom + 1; i <= last; i++)
+            if (_slots[i].Container != null && middle > _slots[i].Top + _slots[i].Height / 2) to = i;
+        for (int i = _dragFrom - 1; i >= 0; i--)
+            if (_slots[i].Container != null && middle < _slots[i].Top + _slots[i].Height / 2) to = i;
+        _dragTo = to;
+
+        // Cards between the old and the new slot step aside by the dragged card's height.
+        for (int i = 0; i <= last; i++)
+        {
+            if (i == _dragFrom || _slots[i].Container is not { } c) continue;
+            double shift = _dragFrom < i && i <= to ? -from.Height : to <= i && i < _dragFrom ? from.Height : 0;
+            c.Translation = new System.Numerics.Vector3(0, (float)shift, 0);
+        }
+
+        UpdateAutoScroll();
+    }
+
+    /// <summary>Near the top or bottom of the list the page scrolls, carrying the card along.</summary>
+    private void UpdateAutoScroll()
+    {
+        bool near = _dragViewportY < AutoScrollZone || _dragViewportY > HotkeysPage.ActualHeight - AutoScrollZone;
+        if (!near) { _autoScroll?.Stop(); return; }
+        if (_autoScroll == null)
+        {
+            _autoScroll = DispatcherQueue.CreateTimer();
+            _autoScroll.Interval = TimeSpan.FromMilliseconds(16);
+            _autoScroll.Tick += (_, _) =>
+            {
+                var scroller = FindChild<ScrollViewer>(HotkeysPage);
+                if (!_dragging || scroller == null) { _autoScroll!.Stop(); return; }
+                double step = _dragViewportY < AutoScrollZone ? -AutoScrollStep : AutoScrollStep;
+                scroller.ChangeView(null, Math.Clamp(scroller.VerticalOffset + step, 0, scroller.ScrollableHeight), null, true);
+                UpdateDrag();
+            };
+        }
+        if (!_autoScroll.IsRunning) _autoScroll.Start();
+    }
+
+    /// <summary>
+    /// Drops the card: the collection is reordered and every card's offset cleared in the same frame, so
+    /// nothing jumps (the list's own reorder animations are off for that one layout pass).
+    /// </summary>
+    private void EndDrag(bool commit)
+    {
+        _dragging = false;
+        _pressedItem = null;
+        _autoScroll?.Stop();
+        var transitions = HotkeysPage.ItemContainerTransitions;
+        bool move = commit && _dragTo != _dragFrom;
+        if (move) HotkeysPage.ItemContainerTransitions = [];
+        foreach (var (container, _, _) in _slots)
+        {
+            if (container == null) continue;
+            container.TranslationTransition = null;
+            container.Translation = default;
+            Canvas.SetZIndex(container, 0);
+        }
+        _slots = [];
+        if (!move) return;
+        Hotkeys.Items.Move(_dragFrom, _dragTo);
+        Hotkeys.Save();
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => HotkeysPage.ItemContainerTransitions = transitions);
+    }
+
+    private static T? FindParent<T>(DependencyObject? o) where T : DependencyObject
+    {
+        while (o != null && o is not T) o = VisualTreeHelper.GetParent(o);
+        return o as T;
+    }
+
+    private static T? FindChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T found) return found;
+            if (FindChild<T>(child) is { } deeper) return deeper;
+        }
+        return null;
+    }
 
     // ---- taskbar widget page ---------------------------------------------------------------------
     // The page edits a copy of the widget settings and applies (and saves) it after every change.
@@ -288,6 +484,7 @@ public sealed partial class SettingsWindow : Window
         OsdHeightText.Text = _osd.Height.ToString();
         OsdBackingSlider.Value = _osd.Backing;
         OsdCornerSlider.Value = _osd.CornerPercent;
+        OsdTextSlider.Value = _osd.TextSize;
         UpdateOsdLabels();
         OsdDurationText.Text = $"{_osd.DurationMs / 1000.0:0.#} s";
         _loadingOsd = false;
@@ -307,6 +504,7 @@ public sealed partial class SettingsWindow : Window
         _osd.Height = (int)Math.Round(OsdHeightSlider.Value);
         _osd.Backing = (int)Math.Round(OsdBackingSlider.Value);
         _osd.CornerPercent = (int)Math.Round(OsdCornerSlider.Value);
+        _osd.TextSize = (int)Math.Round(OsdTextSlider.Value);
         UpdateOsdLabels();
         OsdWidthText.Text = _osd.Width.ToString();
         OsdHeightText.Text = _osd.Height.ToString();
@@ -318,6 +516,7 @@ public sealed partial class SettingsWindow : Window
     {
         OsdBackingText.Text = _osd.Backing > 0 ? $"+{_osd.Backing}" : _osd.Backing.ToString();
         OsdCornerText.Text = $"{_osd.CornerPercent}%";
+        OsdTextText.Text = _osd.TextSize.ToString();
     }
 
     private void OnOsdSlotClick(object sender, RoutedEventArgs e)
