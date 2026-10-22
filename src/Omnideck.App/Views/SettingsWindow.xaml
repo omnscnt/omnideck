@@ -469,38 +469,6 @@
                 <!-- OSD page: what each on-screen notice shows, and the one look they share -->
                 <ScrollViewer x:Name="OsdPage" Visibility="Collapsed">
                 <ScrollViewer.Resources>
-                    <!-- A colour swatch: a filled dot; the chosen one gets a ring (BorderBrush, set in code). -->
-                    <Style x:Key="SwatchButtonStyle" TargetType="Button">
-                        <Setter Property="Width" Value="30" />
-                        <Setter Property="Height" Value="30" />
-                        <Setter Property="BorderBrush" Value="Transparent" />
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="Button">
-                                    <Grid Background="Transparent">
-                                        <VisualStateManager.VisualStateGroups>
-                                            <VisualStateGroup x:Name="CommonStates">
-                                                <VisualState x:Name="Normal" />
-                                                <VisualState x:Name="PointerOver">
-                                                    <VisualState.Setters>
-                                                        <Setter Target="Dot.Margin" Value="4" />
-                                                    </VisualState.Setters>
-                                                </VisualState>
-                                                <VisualState x:Name="Pressed">
-                                                    <VisualState.Setters>
-                                                        <Setter Target="Dot.Opacity" Value="0.7" />
-                                                    </VisualState.Setters>
-                                                </VisualState>
-                                            </VisualStateGroup>
-                                        </VisualStateManager.VisualStateGroups>
-                                        <Ellipse Stroke="{TemplateBinding BorderBrush}" StrokeThickness="2" />
-                                        <Ellipse x:Name="Dot" Margin="5" Fill="{TemplateBinding Background}" />
-                                    </Grid>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-
                     <!-- A card-like tile that switches a notice kind: dimmed when off, a check badge when on. -->
                     <Style x:Key="OsdTileStyle" TargetType="ToggleButton">
                         <Setter Property="Template">
@@ -627,25 +595,22 @@
                             </ItemsRepeater.ItemTemplate>
                         </ItemsRepeater>
 
-                        <Border Margin="0,4,0,0" Style="{StaticResource SettingsCardStyle}">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Also other volume changes" />
-                                    <TextBlock
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        TextWrapping="Wrap"
-                                        Text="Volume notices for media keys, the Windows mixer and apps changing their own volume too. Not the omnideck mixer: its sliders already show it." />
-                                </StackPanel>
-                                <ToggleSwitch x:Name="OsdExternalSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Also other volume changes" Toggled="OnOsdChanged" />
-                            </Grid>
-                        </Border>
 
                         <TextBlock Margin="2,20,0,6" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Look" />
+
+                        <!-- How the notices look with the settings below: a few of them, redrawn on every change. -->
+                        <Border
+                            Padding="0"
+                            Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{ThemeResource OverlayCornerRadius}">
+                            <StackPanel x:Name="OsdPreviewPanel" Margin="0,-6" HorizontalAlignment="Center" Spacing="-28">
+                                <Image x:Name="OsdPreviewVolume" Stretch="None" />
+                                <Image x:Name="OsdPreviewLock" Stretch="None" />
+                                <Image x:Name="OsdPreviewLayout" Stretch="None" />
+                            </StackPanel>
+                        </Border>
 
                         <Border Style="{StaticResource SettingsCardStyle}">
                             <Grid ColumnSpacing="16">
@@ -687,28 +652,6 @@
                                     <Button Grid.Row="1" Grid.Column="1" AutomationProperties.Name="Bottom centre" Click="OnOsdSlotClick" Style="{StaticResource ScreenSlotButtonStyle}" Tag="BottomCenter" />
                                     <Button Grid.Row="1" Grid.Column="2" AutomationProperties.Name="Bottom right" Click="OnOsdSlotClick" Style="{StaticResource ScreenSlotButtonStyle}" Tag="BottomRight" />
                                 </Grid>
-                            </Grid>
-                        </Border>
-
-                        <Border Style="{StaticResource SettingsCardStyle}">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Volume bar width" />
-                                    <TextBlock
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        TextWrapping="Wrap"
-                                        Text="Length of the volume notice; the bar takes up the extra room. Text notices fit their text." />
-                                </StackPanel>
-                                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
-                                    <Slider x:Name="OsdWidthSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Width"
-                                        Maximum="480" Minimum="160" StepFrequency="8" ValueChanged="OnOsdSliderChanged" />
-                                    <TextBlock x:Name="OsdWidthText" Width="36" VerticalAlignment="Center" TextAlignment="Right" />
-                                </StackPanel>
                             </Grid>
                         </Border>
 
@@ -785,46 +728,20 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Number size" />
+                                    <TextBlock Text="Text size" />
                                     <TextBlock
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
                                         TextWrapping="Wrap"
-                                        Text="Size of the volume percentage next to the bar." />
+                                        Text="The volume percentage and the text of the other notices." />
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
-                                    <Slider x:Name="OsdTextSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Number size"
+                                    <Slider x:Name="OsdTextSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Text size"
                                         Maximum="24" Minimum="10" StepFrequency="1" ValueChanged="OnOsdSliderChanged" />
                                     <TextBlock x:Name="OsdTextText" Width="40" VerticalAlignment="Center" TextAlignment="Right" />
                                 </StackPanel>
                             </Grid>
                         </Border>
-
-                        <Border Style="{StaticResource SettingsCardStyle}">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Lock key light" />
-                                    <TextBlock
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        TextWrapping="Wrap"
-                                        Text="The light on the key in Caps, Num and Scroll Lock notices when the lock is on. Off is grey." />
-                                </StackPanel>
-                                <StackPanel x:Name="LockLightSwatches" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="4">
-                                    <Button AutomationProperties.Name="Green" Background="#4CC764" Click="OnLockLightClick" Style="{StaticResource SwatchButtonStyle}" Tag="#4CC764" />
-                                    <Button AutomationProperties.Name="Blue" Background="#3B9CFF" Click="OnLockLightClick" Style="{StaticResource SwatchButtonStyle}" Tag="#3B9CFF" />
-                                    <Button AutomationProperties.Name="Amber" Background="#F5A623" Click="OnLockLightClick" Style="{StaticResource SwatchButtonStyle}" Tag="#F5A623" />
-                                    <Button AutomationProperties.Name="Red" Background="#F25555" Click="OnLockLightClick" Style="{StaticResource SwatchButtonStyle}" Tag="#F25555" />
-                                    <Button AutomationProperties.Name="Violet" Background="#A97BFF" Click="OnLockLightClick" Style="{StaticResource SwatchButtonStyle}" Tag="#A97BFF" />
-                                    <Button AutomationProperties.Name="White" Background="#F2F2F2" Click="OnLockLightClick" Style="{StaticResource SwatchButtonStyle}" Tag="#F2F2F2" />
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-
 
                         <Border Style="{StaticResource SettingsCardStyle}">
                             <Grid ColumnSpacing="16">
@@ -855,16 +772,107 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Preview" />
+                                    <TextBlock Text="Show on screen" />
                                     <TextBlock
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
                                         TextWrapping="Wrap"
-                                        Text="Shows the volume notice with the current master volume." />
+                                        Text="The volume notice, where and how it will appear." />
                                 </StackPanel>
                                 <Button Grid.Column="1" HorizontalAlignment="Right" Click="OnOsdPreview" Content="Show" />
                             </Grid>
                         </Border>
+
+                        <TextBlock Margin="2,20,0,6" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Volume" />
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Bar width" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Length of the volume notice; the bar takes up the extra room. The other notices fit their text." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                                    <Slider x:Name="OsdWidthSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Width"
+                                        Maximum="480" Minimum="160" StepFrequency="8" ValueChanged="OnOsdSliderChanged" />
+                                    <TextBlock x:Name="OsdWidthText" Width="36" VerticalAlignment="Center" TextAlignment="Right" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border Margin="0,4,0,0" Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Also other changes" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Volume notices for media keys, the Windows mixer and apps changing their own volume too. Not the omnideck mixer: its sliders already show it." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="OsdExternalSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Also other volume changes" Toggled="OnOsdChanged" />
+                            </Grid>
+                        </Border>
+
+                        <TextBlock Margin="2,20,0,6" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Lock keys" />
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Light colour" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="The light on the key when Caps, Num or Scroll Lock is on (off is grey). Type a #RRGGBB code or click the swatch to pick." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="8">
+                                    <TextBox
+                                        x:Name="LockLightBox"
+                                        Width="104"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.Name="Light colour code"
+                                        KeyDown="OnLockLightKeyDown"
+                                        LostFocus="OnLockLightBoxCommit"
+                                        MaxLength="7" />
+                                    <Button
+                                        x:Name="LockLightSwatch"
+                                        Width="32"
+                                        Height="32"
+                                        Padding="0"
+                                        AutomationProperties.Name="Pick the light colour"
+                                        CornerRadius="16">
+                                        <Button.Flyout>
+                                            <Flyout Placement="BottomEdgeAlignedRight">
+                                                <ColorPicker
+                                                    x:Name="LockLightPicker"
+                                                    ColorChanged="OnLockLightPicked"
+                                                    IsAlphaEnabled="False"
+                                                    IsColorChannelTextInputVisible="False"
+                                                    IsHexInputVisible="False"
+                                                    IsMoreButtonVisible="False" />
+                                            </Flyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
                     </StackPanel>
                 </Grid>
                 </ScrollViewer>

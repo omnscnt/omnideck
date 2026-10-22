@@ -553,24 +553,72 @@ public sealed partial class SettingsWindow : Window
         OsdKindTiles.ItemsSource = new[] { _osdVolume, _osdMic, _osdCaps, _osdNum, _osdScroll, _osdLayout, _osdDevice };
     }
 
-    private void OnLockLightClick(object sender, RoutedEventArgs e)
+    // ---- lock key light: a #RRGGBB field and a swatch that opens a colour picker ----------------------
+
+    private bool _syncingLight;
+
+    private void ShowLockLight()
     {
-        if ((sender as FrameworkElement)?.Tag is not string hex) return;
-        _osd.LockLightColor = hex;
-        UpdateLockLightSwatches();
+        var color = VolumeOsdSettings.ParseColor(_osd.LockLightColor) ?? VolumeOsdSettings.ParseColor(VolumeOsdSettings.DefaultLockLight)!.Value;
+        _syncingLight = true;
+        LockLightBox.Text = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+        LockLightSwatch.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(color);
+        LockLightPicker.Color = color;
+        _syncingLight = false;
+    }
+
+    private void SetLockLight(Windows.UI.Color color)
+    {
+        _osd.LockLightColor = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+        ShowLockLight();
         ApplyOsd();
     }
 
-    /// <summary>A ring around the chosen colour.</summary>
-    private void UpdateLockLightSwatches()
+    private void OnLockLightPicked(ColorPicker sender, ColorChangedEventArgs args)
     {
-        foreach (var swatch in LockLightSwatches.Children.OfType<Button>())
-        {
-            bool chosen = string.Equals(swatch.Tag as string, _osd.LockLightColor, StringComparison.OrdinalIgnoreCase);
-            swatch.BorderBrush = chosen
-                ? (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorPrimaryBrush"]
-                : new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        }
+        if (!_syncingLight) SetLockLight(args.NewColor);
+    }
+
+    private void OnLockLightKeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (e.Key == Windows.System.VirtualKey.Enter) OnLockLightBoxCommit(sender, e);
+    }
+
+    /// <summary>A valid code applies; anything else goes back to the current colour.</summary>
+    private void OnLockLightBoxCommit(object sender, RoutedEventArgs e)
+    {
+        string text = LockLightBox.Text.Trim();
+        if (!text.StartsWith('#')) text = "#" + text;
+        if (VolumeOsdSettings.ParseColor(text) is { } color) SetLockLight(color);
+        else ShowLockLight();
+    }
+
+    // ---- preview: a few notices drawn with the current look ------------------------------------------
+
+    private VolumeOsdView? _previewView;
+
+    private void UpdateOsdPreview()
+    {
+        _previewView ??= new VolumeOsdView();
+        var layout = _osd.ToLayout();
+        bool light = (Content as FrameworkElement)?.ActualTheme == ElementTheme.Light;
+        double scale = (Content as FrameworkElement)?.XamlRoot?.RasterizationScale ?? 1.0;
+        var master = App.Audio.Master;
+        ShowPreview(OsdPreviewVolume, new OsdContent("master", null, 0, master?.Volume ?? 0.5f, master?.IsMuted ?? false), layout, light, scale);
+        ShowPreview(OsdPreviewLock, OsdContent.KeyNotice("lock", "A", true, "Caps Lock on"), layout, light, scale);
+        ShowPreview(OsdPreviewLayout, OsdContent.KeyNotice("layout", "EN", null, "English (United States)"), layout, light, scale);
+    }
+
+    private void ShowPreview(Image image, OsdContent content, OsdLayout layout, bool light, double scale)
+    {
+        var pixels = _previewView!.Render(content, layout, content.Volume, 1, light, scale, out int width, out int height);
+        var bitmap = new Microsoft.UI.Xaml.Media.Imaging.WriteableBitmap(width, height);
+        using (var stream = System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeBufferExtensions.AsStream(bitmap.PixelBuffer))
+            stream.Write(pixels, 0, Math.Min(pixels.Length, width * height * 4));
+        bitmap.Invalidate();
+        image.Source = bitmap;
+        image.Width = width / scale;
+        image.Height = height / scale;
     }
 
     private void LoadOsdSettings()
@@ -594,7 +642,8 @@ public sealed partial class SettingsWindow : Window
         OsdBackingSlider.Value = _osd.Backing;
         OsdCornerSlider.Value = _osd.CornerPercent;
         OsdTextSlider.Value = _osd.TextSize;
-        UpdateLockLightSwatches();
+        ShowLockLight();
+        UpdateOsdPreview();
         UpdateOsdLabels();
         OsdDurationText.Text = $"{_osd.DurationMs / 1000.0:0.#} s";
         _loadingOsd = false;
@@ -626,6 +675,7 @@ public sealed partial class SettingsWindow : Window
         OsdHeightText.Text = _osd.Height.ToString();
         OsdDurationText.Text = $"{_osd.DurationMs / 1000.0:0.#} s";
         App.Instance.ApplyVolumeOsd(_osd);
+        UpdateOsdPreview();
     }
 
     private void UpdateOsdLabels()
