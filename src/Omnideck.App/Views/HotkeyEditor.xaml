@@ -51,6 +51,7 @@
                 <x:String>Active window</x:String>
                 <x:String>Media player</x:String>
                 <x:String>Specific app</x:String>
+                <x:String>All except active</x:String>
             </ComboBox>
         </Grid>
 

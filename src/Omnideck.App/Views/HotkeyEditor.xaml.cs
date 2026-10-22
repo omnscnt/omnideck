@@ -111,8 +111,10 @@ public sealed partial class HotkeyEditor : UserControl
 
         var conflict = _draft.Keys.IsEmpty ? null : _item.Owner.FindConflict(_draft);
         bool appMissing = !_draft.IsAppAction && _draft.Target == HotkeyTarget.App && string.IsNullOrEmpty(_draft.AppName);
+        bool othersNeedVolume = !_draft.IsAppAction && _draft.Target == HotkeyTarget.AllExceptActive && !_draft.IsVolumeAction;
         string? problem = conflict != null ? $"Already used: {HotkeyItemViewModel.Describe(conflict)}. Not saved."
             : appMissing ? "Pick or type an app. Not saved."
+            : othersNeedVolume ? "'All except active' works with volume and mute only. Not saved."
             : null;
         StatusText.Text = problem ?? "";
         StatusText.Visibility = problem == null ? Visibility.Collapsed : Visibility.Visible;

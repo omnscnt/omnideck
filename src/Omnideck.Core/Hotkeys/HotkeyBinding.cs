@@ -35,6 +35,8 @@ public enum HotkeyTarget
     MediaPlayer,
     /// <summary>A specific app, by process name (see <see cref="HotkeyBinding.AppName"/>).</summary>
     App,
+    /// <summary>Every app playing sound except the one that owns the foreground window (volume actions only).</summary>
+    AllExceptActive,
 }
 
 /// <summary>Discord-style binding: key + trigger + action + target.</summary>

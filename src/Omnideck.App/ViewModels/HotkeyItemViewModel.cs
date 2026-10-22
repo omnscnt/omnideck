@@ -42,6 +42,7 @@ public sealed partial class HotkeyItemViewModel : ObservableObject
         { IsAppAction: true } => "",                 // mixer
         { Target: HotkeyTarget.App } => "",          // app (until its icon loads)
         { Target: HotkeyTarget.ActiveWindow } => "", // windows
+        { Target: HotkeyTarget.AllExceptActive } => "", // stacked windows: the others
         { Target: HotkeyTarget.MediaPlayer } => "",  // note
         { IsVolumeAction: true } => "",              // speaker: master volume
         _ => "",                                     // current media
@@ -111,6 +112,7 @@ public sealed partial class HotkeyItemViewModel : ObservableObject
         HotkeyTarget.ActiveWindow => "Active window",
         HotkeyTarget.MediaPlayer => "Media player",
         HotkeyTarget.App => string.IsNullOrWhiteSpace(b.AppName) ? "App" : b.AppName!,
+        HotkeyTarget.AllExceptActive => "All except active",
         _ => b.IsVolumeAction ? "Master volume" : "Current media",
     };
 }

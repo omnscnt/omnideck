@@ -59,8 +59,17 @@ public sealed class HotkeyActionRunner(AudioService audio, MediaSessionService m
         HotkeyTarget.ActiveWindow => ForegroundProcessId() is int pid ? audio.FindAppByProcessId(pid) : null,
         HotkeyTarget.MediaPlayer => await media.GetCurrentAppNameAsync().ConfigureAwait(false) is { } name ? audio.FindApp(name) : null,
         HotkeyTarget.App => string.IsNullOrWhiteSpace(binding.AppName) ? null : audio.FindApp(binding.AppName),
+        HotkeyTarget.AllExceptActive => OtherApps(),
         _ => null,
     };
+
+    /// <summary>Every app with sound except the foreground window's (system sounds included); null when there are none.</summary>
+    private AppGroup? OtherApps()
+    {
+        var active = ForegroundProcessId() is int pid ? audio.FindAppByProcessId(pid) : null;
+        var others = audio.Apps.Where(a => !ReferenceEquals(a, active)).ToList();
+        return others.Count == 0 ? null : new AppGroup(others);
+    }
 
     private async Task RunMediaAsync(HotkeyBinding binding)
     {
