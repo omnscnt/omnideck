@@ -53,7 +53,7 @@ public sealed class VolumeOsdView
     /// <summary>How wide the icon spot is: an app icon, a key cap, a glyph by its ink, or the speaker.</summary>
     private float IconWidth(OsdContent content, float k)
     {
-        if (content.KeyLabel != null) return KeyCapWidth(content.KeyLabel, k);
+        if (content.KeyLabel != null) return KeyCapWidth(content.KeyLabel, content.KeyOn != null, k);
         if (content.Icon != null) return IconSize * k;
         return content.Glyph != null ? GlyphInkWidth(content.Glyph, GlyphSize * k) : SpeakerInkWidth(GlyphSize * k);
     }
@@ -123,7 +123,7 @@ public sealed class VolumeOsdView
                 float iconWidth = IconWidth(content, k);
                 var iconRect = new Rect(box.X + pad, box.Y + (box.Height - iconSize) / 2, iconWidth, iconSize);
                 if (content.KeyLabel != null)
-                    DrawKeyCap(ds, content.KeyLabel, content.KeyOn, iconRect, k, Fore, scale);
+                    DrawKeyCap(ds, content.KeyLabel, content.KeyOn, layout.LockLight, light, iconRect, k, Fore, scale);
                 else if (_icon != null)
                     ds.DrawImage(_icon, iconRect, _icon.Bounds, content.Muted ? 0.4f : 1f, CanvasImageInterpolation.HighQualityCubic);
                 else
@@ -142,7 +142,11 @@ public sealed class VolumeOsdView
                         TrimmingGranularity = CanvasTextTrimmingGranularity.Character, TrimmingSign = CanvasTrimmingSign.Ellipsis,
                     };
                     using var text = new CanvasTextLayout(_device, content.Text, textFormat, textWidth, 1000);
-                    float textY = Snap((float)(box.Y + (box.Height - text.LayoutBounds.Height) / 2), scale);
+                    // Centred by its capital letters' ink (the line box has room for accents and descenders,
+                    // which would put the visible text off centre): the same for every text.
+                    Rect caps;
+                    using (var probe = new CanvasTextLayout(_device, "H", textFormat, 1000, 1000)) caps = probe.DrawBounds;
+                    float textY = Snap((float)(box.Y + box.Height / 2 - caps.Height / 2 - caps.Y), scale);
                     ds.DrawTextLayout(text, Snap(textLeft, scale), textY, Fore(content.Muted ? 0.6 : 0.9));
                     goto done;
                 }
@@ -185,44 +189,54 @@ public sealed class VolumeOsdView
 
     // ---- key caps: the icon for lock keys and the keyboard layout -----------------------------------
 
-    private CanvasTextFormat KeyCapFormat(float k) => new()
+    private CanvasTextFormat KeyCapFormat(float k, bool withLight) => new()
     {
-        FontFamily = TextFont, FontSize = 11 * k, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+        FontFamily = TextFont, FontSize = (withLight ? 10 : 11) * k, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
         WordWrapping = CanvasWordWrapping.NoWrap,
     };
 
-    /// <summary>At least square; wider for a longer label ("EN"), with room on both sides of it.</summary>
-    private float KeyCapWidth(string label, float k)
+    /// <summary>Room the light takes in the top-right corner, so the label sits clear of it.</summary>
+    private const float LightInset = 5;
+
+    /// <summary>
+    /// At least square (a little wider with a light); wider for a longer label ("EN"), with room on both
+    /// sides of it.
+    /// </summary>
+    private float KeyCapWidth(string label, bool withLight, float k)
     {
-        using var format = KeyCapFormat(k);
+        using var format = KeyCapFormat(k, withLight);
         using var text = new CanvasTextLayout(_device, label, format, 1000, 100);
-        return Math.Max(KeyCapHeight * k, (float)text.DrawBounds.Width + 10 * k);
+        float min = (KeyCapHeight + (withLight ? 3 : 0)) * k;
+        return Math.Max(min, (float)text.DrawBounds.Width + (withLight ? 10 + LightInset : 10) * k);
     }
 
     /// <summary>
-    /// A key: rounded outline, its label in the middle and (for lock keys) a light in the corner, filled
-    /// when the lock is on. The label is centred by its ink, snapped to pixels.
+    /// A key: rounded outline and its label; lock keys also get a light in the top-right corner (grey when
+    /// off, <paramref name="lightColor"/> when on), with the label centred in the space left beside and below
+    /// it. Labels are centred by their ink, snapped to pixels.
     /// </summary>
-    private void DrawKeyCap(CanvasDrawingSession ds, string label, bool? lit, Rect spot, float k, Func<double, Color> fore, double scale)
+    private void DrawKeyCap(CanvasDrawingSession ds, string label, bool? lit, Color lightColor, bool lightTheme, Rect spot, float k, Func<double, Color> fore, double scale)
     {
         float h = KeyCapHeight * k, w = (float)spot.Width;
         var cap = new Rect(spot.X, spot.Y + (spot.Height - h) / 2, w, h);
         float stroke = Math.Max(1, 1.4f * k), r = 4 * k;
         ds.DrawRoundedRectangle(Inflate(cap, -stroke / 2), r, r, fore(0.9), stroke);
 
-        using var format = KeyCapFormat(k);
+        bool withLight = lit != null;
+        float inset = withLight ? LightInset * k : 0;
+        var labelArea = new Rect(cap.X, cap.Y + inset * 0.6, Math.Max(1, cap.Width - inset * 0.6), Math.Max(1, cap.Height - inset * 0.6));
+        using var format = KeyCapFormat(k, withLight);
         using var text = new CanvasTextLayout(_device, label, format, 1000, 100);
         var ink = text.DrawBounds;
-        float x = Snap((float)(cap.X + (cap.Width - ink.Width) / 2 - ink.X), scale);
-        float y = Snap((float)(cap.Y + (cap.Height - ink.Height) / 2 - ink.Y + (lit != null ? 1.5f * k : 0)), scale);
+        float x = Snap((float)(labelArea.X + (labelArea.Width - ink.Width) / 2 - ink.X), scale);
+        float y = Snap((float)(labelArea.Y + (labelArea.Height - ink.Height) / 2 - ink.Y), scale);
         ds.DrawTextLayout(text, x, y, fore(1));
 
         if (lit is bool on)
         {
-            var light = new Vector2((float)cap.Right - 5 * k, (float)cap.Y + 5 * k);
-            float radius = 1.9f * k;
-            if (on) ds.FillCircle(light, radius, fore(1));
-            else ds.DrawCircle(light, radius, fore(0.55), Math.Max(0.8f, 0.9f * k));
+            var center = new Vector2((float)cap.Right - 4.6f * k, (float)cap.Y + 4.6f * k);
+            var off = lightTheme ? Color.FromArgb(255, 0xA8, 0xA8, 0xA8) : Color.FromArgb(255, 0x6E, 0x6E, 0x6E);
+            ds.FillCircle(center, 2.1f * k, on ? lightColor : off);
         }
     }
 

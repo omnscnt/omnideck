@@ -538,17 +538,39 @@ public sealed partial class SettingsWindow : Window
     private VolumeOsdSettings _osd = new();
     private bool _loadingOsd = true; // until LoadOsdSettings: the slider fires ValueChanged while XAML is still being built
 
-    private OsdKindTile _osdVolume = null!, _osdMic = null!, _osdLocks = null!, _osdLayout = null!, _osdDevice = null!;
+    private OsdKindTile _osdVolume = null!, _osdMic = null!, _osdCaps = null!, _osdNum = null!, _osdScroll = null!, _osdLayout = null!, _osdDevice = null!;
 
     /// <summary>The tiles that pick which notices show; each change applies (and saves) at once.</summary>
     private void SetupOsdTiles()
     {
-        _osdVolume = new("Volume", "The new volume when a hotkey changes it", "", ApplyOsd);
-        _osdMic = new("Microphone", "Muted or on, by a hotkey or anything else", "", ApplyOsd);
-        _osdLocks = new("Lock keys", "Caps, Num and Scroll Lock on or off", "", ApplyOsd);
-        _osdLayout = new("Keyboard layout", "The input language you switch to", "", ApplyOsd);
-        _osdDevice = new("Output device", "The new default output", "", ApplyOsd);
-        OsdKindTiles.ItemsSource = new[] { _osdVolume, _osdMic, _osdLocks, _osdLayout, _osdDevice };
+        _osdVolume = new("Volume", "Volume set by a hotkey", "", null, ApplyOsd);
+        _osdMic = new("Microphone", "Muted or unmuted", "", null, ApplyOsd);
+        _osdCaps = new("Caps Lock", "Turning on or off", null, "A", ApplyOsd);
+        _osdNum = new("Num Lock", "Turning on or off", null, "1", ApplyOsd);
+        _osdScroll = new("Scroll Lock", "Turning on or off", null, "↕", ApplyOsd);
+        _osdLayout = new("Keyboard layout", "Switching the language", "", null, ApplyOsd);
+        _osdDevice = new("Output device", "Switching the output", "", null, ApplyOsd);
+        OsdKindTiles.ItemsSource = new[] { _osdVolume, _osdMic, _osdCaps, _osdNum, _osdScroll, _osdLayout, _osdDevice };
+    }
+
+    private void OnLockLightClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not string hex) return;
+        _osd.LockLightColor = hex;
+        UpdateLockLightSwatches();
+        ApplyOsd();
+    }
+
+    /// <summary>A ring around the chosen colour.</summary>
+    private void UpdateLockLightSwatches()
+    {
+        foreach (var swatch in LockLightSwatches.Children.OfType<Button>())
+        {
+            bool chosen = string.Equals(swatch.Tag as string, _osd.LockLightColor, StringComparison.OrdinalIgnoreCase);
+            swatch.BorderBrush = chosen
+                ? (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorPrimaryBrush"]
+                : new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        }
     }
 
     private void LoadOsdSettings()
@@ -557,7 +579,9 @@ public sealed partial class SettingsWindow : Window
         _osd = App.Instance.VolumeOsdSettings;
         _osdVolume.Load(_osd.Enabled);
         _osdMic.Load(_osd.ShowMicrophone);
-        _osdLocks.Load(_osd.ShowLockKeys);
+        _osdCaps.Load(_osd.ShowCapsLock);
+        _osdNum.Load(_osd.ShowNumLock);
+        _osdScroll.Load(_osd.ShowScrollLock);
         _osdLayout.Load(_osd.ShowKeyboardLayout);
         _osdDevice.Load(_osd.ShowOutputDevice);
         UpdateOsdPicker();
@@ -570,6 +594,7 @@ public sealed partial class SettingsWindow : Window
         OsdBackingSlider.Value = _osd.Backing;
         OsdCornerSlider.Value = _osd.CornerPercent;
         OsdTextSlider.Value = _osd.TextSize;
+        UpdateLockLightSwatches();
         UpdateOsdLabels();
         OsdDurationText.Text = $"{_osd.DurationMs / 1000.0:0.#} s";
         _loadingOsd = false;
@@ -584,7 +609,9 @@ public sealed partial class SettingsWindow : Window
         if (_loadingOsd) return;
         _osd.Enabled = _osdVolume.IsOn;
         _osd.ShowMicrophone = _osdMic.IsOn;
-        _osd.ShowLockKeys = _osdLocks.IsOn;
+        _osd.ShowCapsLock = _osdCaps.IsOn;
+        _osd.ShowNumLock = _osdNum.IsOn;
+        _osd.ShowScrollLock = _osdScroll.IsOn;
         _osd.ShowKeyboardLayout = _osdLayout.IsOn;
         _osd.ShowOutputDevice = _osdDevice.IsOn;
         _osd.DurationMs = (int)Math.Round(OsdDurationSlider.Value * 1000);

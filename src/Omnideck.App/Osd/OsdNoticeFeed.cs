@@ -87,11 +87,12 @@ public sealed class OsdNoticeFeed
 
     private void OnLockKeyPressed(int vk)
     {
-        if (!_settings().ShowLockKeys) return;
+        var settings = _settings();
+        if (!(vk switch { 0x14 => settings.ShowCapsLock, 0x90 => settings.ShowNumLock, _ => settings.ShowScrollLock })) return;
         // The toggle flips as the key goes down; read it once Windows has applied it.
         Thread.Sleep(60);
         bool on = (GetKeyState(vk) & 1) != 0;
-        var (name, label) = vk switch { 0x14 => ("Caps Lock", "A"), 0x90 => ("Num Lock", "1"), _ => ("Scroll Lock", "2195") };
+        var (name, label) = vk switch { 0x14 => ("Caps Lock", "A"), 0x90 => ("Num Lock", "1"), _ => ("Scroll Lock", "↕") }; // ↕
         _osd.Show(OsdContent.KeyNotice("lock:" + vk, label, on, $"{name} {(on ? "on" : "off")}", dimmed: !on));
     }
 

@@ -12,12 +12,19 @@ public sealed class VolumeOsdSettings
     public bool Enabled { get; set; } = true;
 
     public bool ShowMicrophone { get; set; } = true;
-    public bool ShowLockKeys { get; set; } = true;
+    public bool ShowCapsLock { get; set; } = true;
+    public bool ShowNumLock { get; set; } = true;
+    public bool ShowScrollLock { get; set; } = true;
+
+    /// <summary>The lock keys' light when on, as #RRGGBB (off is always grey).</summary>
+    public string LockLightColor { get; set; } = DefaultLockLight;
+
+    public const string DefaultLockLight = "#4CC764";
     public bool ShowKeyboardLayout { get; set; } = true;
     public bool ShowOutputDevice { get; set; } = true;
 
     [System.Text.Json.Serialization.JsonIgnore]
-    public bool AnyEnabled => Enabled || ShowMicrophone || ShowLockKeys || ShowKeyboardLayout || ShowOutputDevice;
+    public bool AnyEnabled => Enabled || ShowMicrophone || ShowCapsLock || ShowNumLock || ShowScrollLock || ShowKeyboardLayout || ShowOutputDevice;
 
     public OsdPosition Position { get; set; } = OsdPosition.BottomCenter;
 
@@ -45,13 +52,20 @@ public sealed class VolumeOsdSettings
     public OsdLayout ToLayout() => new(
         Math.Clamp(Width, MinWidth, MaxWidth), Math.Clamp(Height, MinHeight, MaxHeight),
         Math.Clamp(Backing, MinBacking, MaxBacking), Math.Clamp(CornerPercent, 0, 100),
-        Math.Clamp(TextSize, MinTextSize, MaxTextSize));
+        Math.Clamp(TextSize, MinTextSize, MaxTextSize), ParseColor(LockLightColor) ?? ParseColor(DefaultLockLight)!.Value);
+
+    /// <summary>"#RRGGBB" to a colour; null when it isn't one.</summary>
+    public static Windows.UI.Color? ParseColor(string? hex)
+    {
+        if (hex is not { Length: 7 } || hex[0] != '#' || !uint.TryParse(hex.AsSpan(1), System.Globalization.NumberStyles.HexNumber, null, out uint rgb)) return null;
+        return Windows.UI.Color.FromArgb(255, (byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+    }
 
     public VolumeOsdSettings Clone() => (VolumeOsdSettings)MemberwiseClone();
 }
 
 /// <summary>Sizes of one indicator in DIPs: the content box, the backing's extra margin, the corner rounding, the number.</summary>
-public readonly record struct OsdLayout(float Width, float Height, float Backing, float CornerPercent, float TextSize);
+public readonly record struct OsdLayout(float Width, float Height, float Backing, float CornerPercent, float TextSize, Windows.UI.Color LockLight);
 
 /// <summary>What one notice shows: a volume bar with its number, or (with <paramref name="Text"/>) a line of text.</summary>
 /// <param name="Key">Identifies the target: a new key restarts the appear animation, the same one just updates.</param>
