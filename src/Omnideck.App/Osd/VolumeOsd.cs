@@ -95,7 +95,7 @@ public sealed class VolumeOsd : IDisposable
             switch (msg)
             {
                 case WM_APP_SHOW: OnShow(); return IntPtr.Zero;
-                case WM_APP_SETTINGS: if (!Settings.Enabled) HideNow(); return IntPtr.Zero;
+                case WM_APP_SETTINGS: OnSettingsChanged(); return IntPtr.Zero;
                 case WM_TIMER: Tick(); return IntPtr.Zero;
                 case WM_NCHITTEST: return (IntPtr)(-1); // HTTRANSPARENT: never takes the mouse
                 case WM_MOUSEACTIVATE: return (IntPtr)3; // MA_NOACTIVATE
@@ -140,6 +140,16 @@ public sealed class VolumeOsd : IDisposable
         if (_phase != Phase.Holding) _phase = Phase.Showing; // also turns a fade-out back around
         _holdUntil = Now + Math.Max(300, Settings.DurationMs) / 1000.0;
         StartTimer();
+        Draw();
+    }
+
+    /// <summary>A change made while the indicator is up (position, size, text) shows at once, not next time.</summary>
+    private void OnSettingsChanged()
+    {
+        if (!Settings.Enabled) { HideNow(); return; }
+        if (_phase == Phase.Hidden) return;
+        _layout = Settings.ToLayout();
+        Place();
         Draw();
     }
 
