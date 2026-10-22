@@ -180,7 +180,7 @@ public sealed partial class SettingsWindow : Window
     // Positions are taken once when the drag starts; everything moves by Translation, and the collection
     // is only reordered on release.
 
-    private const double DragThreshold = 6, CardGap = 4, AutoScrollZone = 48, AutoScrollStep = 10;
+    private const double DragThreshold = 6, CardGap = 4, AutoScrollZone = 56, AutoScrollMaxSpeed = 900; // DIPs, DIPs per second
 
     private HotkeyItemViewModel? _pressedItem;
     private Point _pressPoint;
@@ -190,7 +190,11 @@ public sealed partial class SettingsWindow : Window
     private double _dragViewportX, _dragViewportY; // last pointer position over the list (for auto-scroll)
     private bool _dropping;              // the dropped card is gliding into its slot
     private (ListViewItem? Container, double Top, double Height)[] _slots = [];
-    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _autoScroll;
+    private bool _autoScrolling;
+    private ScrollViewer? _scroller;
+    private ScrollViewer? Scroller => _scroller ??= FindChild<ScrollViewer>(HotkeysPage);
+    private double _scrollTarget;        // the scroll offset we asked for (ChangeView applies it on the next layout)
+    private readonly System.Diagnostics.Stopwatch _autoScrollClock = new();
 
 
     private void SetupReorder()
@@ -269,21 +273,21 @@ public sealed partial class SettingsWindow : Window
         if (Application.Current.Resources.TryGetValue("SolidBackgroundFillColorBaseBrush", out var solid) && solid is Brush brush)
             dragged.Background = brush;
 
-        _dragStartY = PanelY(e.GetCurrentPoint(HotkeysPage).Position.Y);
+        _scrollTarget = Scroller?.VerticalOffset ?? 0;
+        _dragStartY = e.GetCurrentPoint(HotkeysPage).Position.Y + _scrollTarget;
         _dragging = true;
         return true;
     }
-
-    /// <summary>A Y over the list in panel coordinates (they move with scrolling, the viewport doesn't).</summary>
-    private double PanelY(double viewportY) =>
-        HotkeysPage.TransformToVisual(HotkeysPage.ItemsPanelRoot).TransformPoint(new Point(0, viewportY)).Y;
 
     private void UpdateDrag()
     {
         var from = _slots[_dragFrom];
         int last = _slots.Length - 1;
+        // Pointer in content coordinates: over the list plus the scroll offset. While auto-scrolling that is
+        // the offset just asked for, so the card moves in step with the scroll on the same frame.
+        if (!_autoScrolling) _scrollTarget = Scroller?.VerticalOffset ?? _scrollTarget;
         // The card stays within the list: from the first slot's top to the last slot's bottom.
-        double dy = PanelY(_dragViewportY) - _dragStartY;
+        double dy = _dragViewportY + _scrollTarget - _dragStartY;
         double minDy = _slots[0].Container != null ? _slots[0].Top - from.Top : double.NegativeInfinity;
         double maxDy = _slots[last].Container != null ? _slots[last].Top + _slots[last].Height - (from.Top + from.Height) : double.PositiveInfinity;
         dy = Math.Clamp(dy, Math.Min(0, minDy), Math.Max(0, maxDy));
@@ -311,25 +315,46 @@ public sealed partial class SettingsWindow : Window
         UpdateAutoScroll();
     }
 
-    /// <summary>Near the top or bottom of the list the page scrolls, carrying the card along.</summary>
+    /// <summary>
+    /// Near the top or bottom of the list the page scrolls, carrying the card along: every frame, faster
+    /// the deeper the pointer is in the edge zone, by elapsed time rather than a fixed step.
+    /// </summary>
     private void UpdateAutoScroll()
     {
         bool near = _dragViewportY < AutoScrollZone || _dragViewportY > HotkeysPage.ActualHeight - AutoScrollZone;
-        if (!near) { _autoScroll?.Stop(); return; }
-        if (_autoScroll == null)
+        if (near == _autoScrolling) return;
+        _autoScrolling = near;
+        if (near)
         {
-            _autoScroll = DispatcherQueue.CreateTimer();
-            _autoScroll.Interval = TimeSpan.FromMilliseconds(16);
-            _autoScroll.Tick += (_, _) =>
-            {
-                var scroller = FindChild<ScrollViewer>(HotkeysPage);
-                if (!_dragging || scroller == null) { _autoScroll!.Stop(); return; }
-                double step = _dragViewportY < AutoScrollZone ? -AutoScrollStep : AutoScrollStep;
-                scroller.ChangeView(null, Math.Clamp(scroller.VerticalOffset + step, 0, scroller.ScrollableHeight), null, true);
-                UpdateDrag();
-            };
+            _autoScrollClock.Restart();
+            CompositionTarget.Rendering += OnAutoScrollFrame;
         }
-        if (!_autoScroll.IsRunning) _autoScroll.Start();
+        else CompositionTarget.Rendering -= OnAutoScrollFrame;
+    }
+
+    private void StopAutoScroll()
+    {
+        if (!_autoScrolling) return;
+        _autoScrolling = false;
+        CompositionTarget.Rendering -= OnAutoScrollFrame;
+    }
+
+    private void OnAutoScrollFrame(object? sender, object e)
+    {
+        var scroller = Scroller;
+        if (!_dragging || scroller == null) { StopAutoScroll(); return; }
+        double dt = Math.Min(0.05, _autoScrollClock.Elapsed.TotalSeconds);
+        _autoScrollClock.Restart();
+
+        double depth = _dragViewportY < AutoScrollZone
+            ? -(AutoScrollZone - _dragViewportY)
+            : _dragViewportY - (HotkeysPage.ActualHeight - AutoScrollZone);
+        double speed = Math.Clamp(depth / AutoScrollZone, -1, 1) * AutoScrollMaxSpeed;
+        double target = Math.Clamp(_scrollTarget + speed * dt, 0, scroller.ScrollableHeight);
+        if (Math.Abs(target - _scrollTarget) < 0.01) return;
+        _scrollTarget = target;
+        scroller.ChangeView(null, target, null, true);
+        UpdateDrag();
     }
 
     /// <summary>
@@ -342,7 +367,7 @@ public sealed partial class SettingsWindow : Window
         if (!_dragging) return; // released and capture-lost both end it
         _dragging = false;
         _pressedItem = null;
-        _autoScroll?.Stop();
+        StopAutoScroll();
         if (!commit) _dragTo = _dragFrom;
 
         // Where its slot is, relative to where it started: past the cards it displaced.
