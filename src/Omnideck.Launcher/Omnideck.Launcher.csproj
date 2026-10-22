@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The omnideck.exe at the top of a release folder: starts app\omnideck.exe and exits, so the folder
+       holds this file and app\ instead of hundreds of runtime files. .NET Framework 4.8 ships with
+       Windows, so it needs nothing beside it. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>omnideck</AssemblyName>
+    <RootNamespace>Omnideck.Launcher</RootNamespace>
+    <AssemblyTitle>omnideck.</AssemblyTitle>
+    <Product>omnideck.</Product>
+    <Version>0.4.0</Version>
+    <ApplicationIcon>..\Omnideck.App\Assets\omnideck.ico</ApplicationIcon>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <DebugType>none</DebugType>
+    <GenerateAppConfig>false</GenerateAppConfig>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Omnideck.Views.HotkeyCard"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- A hotkey row: click the header to unfold its editor below; drag to reorder (in the list). -->
+    <Border
+        x:Name="Root"
+        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+        BorderThickness="1"
+        CornerRadius="{ThemeResource OverlayCornerRadius}">
+        <StackPanel>
+            <Grid
+                x:Name="Header"
+                MinHeight="66"
+                Padding="16,10,12,10"
+                Background="Transparent"
+                ColumnSpacing="12"
+                CornerRadius="7"
+                PointerEntered="OnHeaderPointerEntered"
+                PointerExited="OnHeaderPointerExited"
+                PointerCanceled="OnHeaderPointerExited"
+                Tapped="OnHeaderTapped">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- What the hotkey acts on: the app's icon, or a glyph for master / window / player / mixer. -->
+                <Grid Width="24" Height="24" VerticalAlignment="Center">
+                    <Image Source="{x:Bind Item.Icon, Mode=OneWay}" />
+                    <FontIcon FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Glyph="{x:Bind Item.Glyph, Mode=OneWay}" Visibility="{x:Bind Item.GlyphVisibility, Mode=OneWay}" />
+                </Grid>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="6">
+                    <ItemsControl ItemsSource="{x:Bind Item.KeyParts, Mode=OneWay}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" Spacing="4" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <Border Style="{StaticResource KeyCapStyle}">
+                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Text="{x:Bind}" />
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="New hotkey" Visibility="{x:Bind Item.PlaceholderVisibility, Mode=OneWay}" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="{x:Bind Item.Summary, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal" Spacing="4">
+                    <ToggleSwitch
+                        MinWidth="0"
+                        AutomationProperties.Name="Enabled"
+                        IsOn="{x:Bind Item.Enabled, Mode=TwoWay}"
+                        OffContent=""
+                        OnContent="" />
+                    <Button AutomationProperties.Name="Delete" Click="OnDeleteClick" Style="{StaticResource IconButtonStyle}">
+                        <FontIcon FontSize="14" Glyph="&#xE74D;" />
+                    </Button>
+                    <Grid Width="28" Height="28">
+                        <FontIcon
+                            x:Name="Chevron"
+                            FontSize="12"
+                            Glyph="&#xE70D;"
+                            RenderTransformOrigin="0.5,0.5">
+                            <FontIcon.RenderTransform>
+                                <RotateTransform x:Name="ChevronRotation" />
+                            </FontIcon.RenderTransform>
+                        </FontIcon>
+                    </Grid>
+                </StackPanel>
+            </Grid>
+
+            <!-- Editor; its height is animated open/closed (siblings below slide with it). -->
+            <Border
+                x:Name="Body"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0"
+                MaxHeight="0"
+                Visibility="Collapsed">
+                <ContentPresenter x:Name="EditorHost" />
+            </Border>
+        </StackPanel>
+    </Border>
+</UserControl>

@@ -1,13 +1,13 @@
-# omnisound.
+# omnideck.
 
-Утилита управления звуком для Windows 11 — WinUI 3, .NET 8, Windows App SDK 1.8 (unpackaged).
+Пульт для Windows 11: микшер в трее, глобальные хоткеи, виджет «сейчас играет» на таскбаре и индикатор громкости. WinUI 3, .NET 8, Windows App SDK 1.8 (unpackaged). Раньше назывался omnisound.
 
 ## Установка
 
-1. Скачайте `omnisound-<версия>-win-x64.zip` со страницы [Releases](../../releases) и распакуйте в любую папку
-   (например `%LOCALAPPDATA%\Programs\omnisound`).
-2. Запустите `omnisound.exe` — иконка появится в трее. Автозапуск включается в Settings → General.
-   В папке только `omnisound.exe` (запускает программу) и `app\` (сама программа). Обновления ставятся из
+1. Скачайте `omnideck-<версия>-win-x64.zip` со страницы [Releases](../../releases) и распакуйте в любую папку
+   (например `%LOCALAPPDATA%\Programs\omnideck`).
+2. Запустите `omnideck.exe` — иконка появится в трее. Автозапуск включается в Settings → General.
+   В папке только `omnideck.exe` (запускает программу) и `app\` (сама программа). Обновления ставятся из
    Settings → General.
 
 Сборка самодостаточная: .NET и Windows App SDK внутри, ничего доустанавливать не нужно. Windows 10 1809+ / 11, x64.
@@ -31,7 +31,7 @@
   (громкость ±N%, mute, play/pause, next, previous) + цель (общая громкость, активное окно, текущий медиаплеер,
   конкретное приложение). Опционально клавиша блокируется для других программ.
 - Медиакоманды идут через системные медиасессии (GlobalSystemMediaTransportControls) — Spotify, браузеры, плееры.
-- Настройки: `%LOCALAPPDATA%\omnisound\settings.json`.
+- Настройки: `%LOCALAPPDATA%\omnideck\settings.json`.
 
 ## Этап 3 — виджет на таскбаре
 
@@ -45,12 +45,12 @@
 
 - Некликабельная плашка (иконка приложения или динамик, полоска, процент) на полупрозрачной подложке, появляется на
   мониторе с курсором, когда хоткей меняет громкость (общую или приложения); опционально — и при любых других
-  изменениях, кроме микшера omnisound. Layered click-through окно, Win2D, свой поток. `Osd/`.
+  изменениях, кроме микшера omnideck. Layered click-through окно, Win2D, свой поток. `Osd/`.
 - Настройки (вкладка Volume indicator): вкл/выкл, позиция (6 вариантов), длительность, «другие изменения», превью.
 
 ## Структура
 
-- `src/Omnisound.Core` — звуковое ядро без UI (Core Audio через COM напрямую):
+- `src/Omnideck.Core` — звуковое ядро без UI (Core Audio через COM напрямую):
   - `AudioService` — устройство вывода по умолчанию, `Master`, живой список `Apps`, события `AppAdded/AppRemoved/DeviceChanged`,
     `GetOutputDevices()` / `SetDefaultOutput(id)`; поиск для хоткеев: `FindApp("spotify")`, `FindAppByProcessId(pid)`
     (по exe — работает для активного окна браузера/Electron).
@@ -59,12 +59,12 @@
   - Все изменения принимают `Guid context`; события его возвращают, так UI отличает свои изменения от внешних.
   - `Hotkeys/HotkeyEngine` — низкоуровневый хук клавиатуры + автомат срабатываний на каждое сочетание;
     `HotkeyActionRunner` — выполняет привязку; `Media/MediaSessionService` — системные медиасессии.
-- `src/Omnisound.App` — трей, флайаут-микшер, меню трея, автозапуск.
-- `tools/make-icons.ps1` — генерирует иконку приложения (`Assets/omnisound.ico`).
+- `src/Omnideck.App` — трей, флайаут-микшер, меню трея, автозапуск.
+- `tools/make-icons.ps1` — генерирует иконку приложения (`Assets/omnideck.ico`).
 
 ## Сборка и запуск
 
 ```
-dotnet build Omnisound.sln -p:Platform=x64
-src\Omnisound.App\bin\x64\Debug\net8.0-windows10.0.22621.0\win-x64\omnisound.exe
+dotnet build Omnideck.sln -p:Platform=x64
+src\Omnideck.App\bin\x64\Debug\net8.0-windows10.0.22621.0\win-x64\omnideck.exe
 ```

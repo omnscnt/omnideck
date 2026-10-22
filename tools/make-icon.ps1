@@ -1,7 +1,7 @@
-# Builds src/Omnisound.App/Assets/omnisound.ico: a dark grey rounded square with a light four-pointed
+# Builds src/Omnideck.App/Assets/omnideck.ico: a dark grey rounded square with a light four-pointed
 # star (straight edges, every corner rounded alike). Drawn at 8x and downscaled; DIB entries, PNG at 256.
 # Run: powershell -ExecutionPolicy Bypass -File tools/make-icon.ps1
-param([string]$Out = (Join-Path $PSScriptRoot '..\src\Omnisound.App\Assets\omnisound.ico'))
+param([string]$Out = (Join-Path $PSScriptRoot '..\src\Omnideck.App\Assets\omnideck.ico'))
 Add-Type -AssemblyName System.Drawing
 
 $Sizes = 16, 20, 24, 28, 32, 40, 48, 64, 128, 256
@@ -94,7 +94,7 @@ function Render([int]$size) {
         $bw.Write((New-Object byte[] ($maskRow * $size))) # AND mask unused with alpha
         $bw.Flush()
     }
-    if ($size -eq 256) { $small.Save((Join-Path $PSScriptRoot 'omnisound-256.png'), [Drawing.Imaging.ImageFormat]::Png) }
+    if ($size -eq 256) { $small.Save((Join-Path $PSScriptRoot 'omnideck-256.png'), [Drawing.Imaging.ImageFormat]::Png) }
     $small.Dispose()
     , $ms.ToArray()
 }
