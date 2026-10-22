@@ -295,13 +295,17 @@ public sealed partial class SettingsWindow : Window
         float dx = (float)(_dragViewportX - _pressPoint.X);
         from.Container!.Translation = new System.Numerics.Vector3(dx, (float)dy, 0);
 
-        // The slot it would drop into: past every card whose middle its own middle has crossed.
+        // The slot it would drop into: past every card whose middle its own middle has reached (reached, not
+        // passed: pressed against the end of the list, an equal-height card sits exactly on the last middle).
         double middle = from.Top + dy + from.Height / 2;
         int to = _dragFrom;
         for (int i = _dragFrom + 1; i <= last; i++)
-            if (_slots[i].Container != null && middle > _slots[i].Top + _slots[i].Height / 2) to = i;
+            if (_slots[i].Container != null && middle >= _slots[i].Top + _slots[i].Height / 2 - 0.5) to = i;
         for (int i = _dragFrom - 1; i >= 0; i--)
-            if (_slots[i].Container != null && middle < _slots[i].Top + _slots[i].Height / 2) to = i;
+            if (_slots[i].Container != null && middle <= _slots[i].Top + _slots[i].Height / 2 + 0.5) to = i;
+        // Pressed against either end (a tall, unfolded card's middle may never reach the last one's): that end.
+        if (dy >= maxDy - 0.5 && _slots[last].Container != null) to = last;
+        if (dy <= minDy + 0.5 && _slots[0].Container != null) to = 0;
         _dragTo = to;
 
         // Cards between the old and the new slot step aside by the dragged card's height.
