@@ -21,12 +21,30 @@ public sealed partial class AppVolumeViewModel : VolumeViewModelBase, IDisposabl
 
     /// <summary>The device this app is sent to, when not the default (its name; null follows the default).</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(RoutedVisibility), nameof(ToolTip))]
+    [NotifyPropertyChangedFor(nameof(OutputLabel), nameof(OutputToolTip), nameof(OutputOpacity))]
     private string? _routedTo;
 
-    public Visibility RoutedVisibility => RoutedTo != null ? Visibility.Visible : Visibility.Collapsed;
+    /// <summary>The default output's name: what an app that follows the default plays on.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OutputLabel), nameof(OutputToolTip))]
+    private string _defaultOutputName = "Default output";
 
-    public string ToolTip => RoutedTo != null ? $"{Name}\nPlays on {RoutedTo}" : Name;
+    /// <summary>The mixer is wide: the output button shows the device's name, not just an icon.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OutputIconVisibility), nameof(OutputNameVisibility), nameof(OutputButtonWidth))]
+    private bool _isExpanded;
+
+    public string OutputLabel => MixerLayout.ShortName(RoutedTo ?? DefaultOutputName);
+
+    public string OutputToolTip => RoutedTo != null ? $"Plays on {RoutedTo}" : $"Plays on the default output ({DefaultOutputName})";
+
+    /// <summary>Its own device stands out; following the default stays quiet.</summary>
+    public double OutputOpacity => RoutedTo != null ? 1 : 0.55;
+
+    public Visibility OutputButtonVisibility => App.IsSystemSounds ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility OutputIconVisibility => IsExpanded ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility OutputNameVisibility => IsExpanded ? Visibility.Visible : Visibility.Collapsed;
+    public double OutputButtonWidth => IsExpanded ? MixerLayout.ExpandedOutputWidth : MixerLayout.IconOutputWidth;
 
     public string FallbackGlyph => App.IsSystemSounds ? "" : "";
 

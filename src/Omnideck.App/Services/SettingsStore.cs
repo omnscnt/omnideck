@@ -17,6 +17,9 @@ public sealed class AppSettings
     /// <summary>App sliders follow loudness (decibels) instead of the raw volume value, like EarTrumpet.</summary>
     public bool LogarithmicVolume { get; set; }
 
+    /// <summary>The mixer shows each app's output device by name (wider), rather than as an icon.</summary>
+    public bool MixerExpanded { get; set; }
+
     public UpdateSettings Updates { get; set; } = new();
 }
 

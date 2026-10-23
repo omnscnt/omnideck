@@ -20,7 +20,7 @@ namespace Omnideck.Views;
 /// <summary>Borderless acrylic flyout that pops up next to the tray, Windows 11 quick-settings style.</summary>
 public sealed partial class FlyoutWindow : Window
 {
-    private const double WidthDip = 360;
+    private double WidthDip => MixerLayout.Width(ViewModel.IsExpanded);
     private const double MarginDip = 12;
     private const double MaxAppsHeightDip = 540;
 
@@ -368,56 +368,77 @@ public sealed partial class FlyoutWindow : Window
         if (e.Key == VirtualKey.Escape) Hide();
     }
 
-    /// <summary>Rebuilt on every open so plugged/unplugged devices are always current.</summary>
-    private void OnOutputMenuOpening(object sender, object e)
+    // ---- device pickers ----------------------------------------------------------------------------
+
+    /// <summary>The default output for everything. Devices are read on every open, so plugged and unplugged ones are current.</summary>
+    private void OnOutputClick(object sender, RoutedEventArgs e)
     {
-        OutputMenu.Items.Clear();
-        foreach (var device in ViewModel.GetOutputDevices())
-        {
-            var item = new RadioMenuFlyoutItem { Text = device.Name, IsChecked = device.IsDefault, GroupName = "outputs" };
-            var id = device.Id;
-            item.Click += (_, _) => ViewModel.SelectOutput(id);
-            OutputMenu.Items.Add(item);
-        }
-        if (OutputMenu.Items.Count == 0)
-            OutputMenu.Items.Add(new MenuFlyoutItem { Text = "No output devices", IsEnabled = false });
+        var devices = ViewModel.GetOutputDevices();
+        var choices = devices.Select(d => (d.Name, (string?)d.Id, d.IsDefault)).ToList();
+        ShowDevicePicker((FrameworkElement)sender, choices, id => { if (id != null) ViewModel.SelectOutput(id); });
     }
 
     /// <summary>
-    /// An app row's right-click menu: follow the default output, or play on a device of its own (Windows
-    /// remembers the choice for the app). Rebuilt on every open, like the output picker.
+    /// One app's output: follow the default, or a device of its own (Windows remembers it for the app).
     /// </summary>
-    private void OnAppOutputMenuOpening(object sender, object e)
+    private void OnAppOutputClick(object sender, RoutedEventArgs e)
     {
-        var menu = (MenuFlyout)sender;
-        menu.Items.Clear();
-        if ((menu.Target as FrameworkElement)?.DataContext is not AppVolumeViewModel app || app.App.IsSystemSounds || !MixerViewModel.CanRouteApps)
-        {
-            menu.Items.Add(new MenuFlyoutItem { Text = "No output choice for this app", IsEnabled = false });
-            return;
-        }
-
-        string? current = ViewModel.GetAppOutput(app);
+        if ((sender as FrameworkElement)?.DataContext is not AppVolumeViewModel app || !MixerViewModel.CanRouteApps) return;
         var devices = ViewModel.GetOutputDevices();
-        if (current != null && !devices.Any(d => string.Equals(d.Id, current, StringComparison.OrdinalIgnoreCase)))
+        string? current = ViewModel.GetAppOutput(app);
+        if (current != null && !devices.Any(d => SameId(d.Id, current)))
             current = null; // sent to a device that is gone: it plays on the default
-        string defaultName = devices.FirstOrDefault(d => d.IsDefault)?.Name ?? "Default output";
-        var follow = new RadioMenuFlyoutItem { Text = $"Default ({defaultName})", IsChecked = current == null, GroupName = "app-output" };
-        follow.Click += (_, _) => ViewModel.SetAppOutput(app, null);
-        menu.Items.Add(follow);
-        menu.Items.Add(new MenuFlyoutSeparator());
-        foreach (var device in devices)
+        var choices = new List<(string, string?, bool)> { ("Default", null, current == null) };
+        choices.AddRange(devices.Select(d => (d.Name, (string?)d.Id, current != null && SameId(d.Id, current))));
+        ShowDevicePicker((FrameworkElement)sender, choices, id => ViewModel.SetAppOutput(app, id));
+    }
+
+    private static bool SameId(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    // An icon button's picker still needs room for names.
+    private const double MinPickerWidth = 180;
+
+    /// <summary>
+    /// A compact list under <paramref name="target"/>, as wide as it (at least <see cref="MinPickerWidth"/>):
+    /// a check by the current choice, names cut with an ellipsis (whole in the tooltip). In-window, so the
+    /// mixer keeps the activation and stays open.
+    /// </summary>
+    private void ShowDevicePicker(FrameworkElement target, IReadOnlyList<(string Name, string? Id, bool IsCurrent)> choices, Action<string?> pick)
+    {
+        var list = new StackPanel { Width = Math.Max(target.ActualWidth, MinPickerWidth) - 8 }; // minus the presenter's padding and border
+        var flyout = new Flyout
         {
-            var item = new RadioMenuFlyoutItem
+            Content = list,
+            Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedRight,
+            ShouldConstrainToRootBounds = true,
+            FlyoutPresenterStyle = (Style)RootGrid.Resources["PickerPresenterStyle"],
+        };
+        var itemStyle = (Style)RootGrid.Resources["PickerItemStyle"];
+        // "Headphones (CS43131 HIFI Audio)" lists as "Headphones", unless two devices would then read the same.
+        var shortNames = choices.Select(c => MixerLayout.ShortName(c.Name)).ToList();
+        foreach (var ((fullName, id, isCurrent), i) in choices.Select((c, i) => (c, i)))
+        {
+            string name = shortNames.Count(n => n == shortNames[i]) > 1 ? fullName : shortNames[i];
+            var row = new Grid { ColumnSpacing = 6 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            if (isCurrent) row.Children.Add(new FontIcon { FontSize = 10, Glyph = "", VerticalAlignment = VerticalAlignment.Center });
+            var text = new TextBlock { Text = name, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(text, 1);
+            row.Children.Add(text);
+
+            var item = new Button { Content = row, Style = itemStyle };
+            ToolTipService.SetToolTip(item, fullName);
+            item.Click += (_, _) =>
             {
-                Text = device.Name,
-                IsChecked = current != null && string.Equals(device.Id, current, StringComparison.OrdinalIgnoreCase),
-                GroupName = "app-output",
+                flyout.Hide();
+                pick(id);
             };
-            var id = device.Id;
-            item.Click += (_, _) => ViewModel.SetAppOutput(app, id);
-            menu.Items.Add(item);
+            list.Children.Add(item);
         }
+        if (choices.Count == 0)
+            list.Children.Add(new TextBlock { Text = "No output devices", FontSize = 12, Margin = new Thickness(8, 6, 8, 6), Opacity = 0.6 });
+        flyout.ShowAt(target);
     }
 
     private void OnSettingsClick(object sender, RoutedEventArgs e)

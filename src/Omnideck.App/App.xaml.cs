@@ -86,7 +86,11 @@ public partial class App : Application
         };
         _hotkeys.SetBindings(_settings.Hotkeys);
 
-        _flyout = new FlyoutWindow(new MixerViewModel(_audio, dispatcher));
+        _flyout = new FlyoutWindow(new MixerViewModel(_audio, dispatcher, _settings.MixerExpanded, expanded =>
+        {
+            _settings.MixerExpanded = expanded;
+            SettingsStore.Save(_settings);
+        }));
         _tray = new TrayIconHost(() => _flyout.Toggle(), ShowSettings, Shutdown);
 
         _nowPlaying = new NowPlayingWatcher(media);

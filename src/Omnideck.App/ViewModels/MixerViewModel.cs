@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Omnideck.Core;
@@ -24,10 +25,35 @@ public sealed partial class MixerViewModel : ObservableObject
 
     public Visibility EmptyVisibility => Apps.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
-    public MixerViewModel(AudioService audio, DispatcherQueue dispatcher)
+    /// <summary>Wide mixer: each app's output device by name, not just an icon. Remembered.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ExpandGlyph), nameof(ExpandToolTip), nameof(OutputColumnWidth))]
+    private bool _isExpanded;
+
+    /// <summary>The master row keeps a gap as wide as the apps' output buttons, so all sliders line up.</summary>
+    public GridLength OutputColumnWidth => new(IsExpanded ? MixerLayout.ExpandedOutputWidth : MixerLayout.IconOutputWidth);
+
+    public string ExpandGlyph => IsExpanded ? "" : "";
+
+    public string ExpandToolTip => IsExpanded ? "Narrow mixer" : "Show each app's output device";
+
+    private readonly Action<bool> _saveExpanded;
+
+    partial void OnIsExpandedChanged(bool value)
+    {
+        foreach (var app in Apps) app.IsExpanded = value;
+        _saveExpanded(value);
+    }
+
+    [RelayCommand]
+    private void ToggleExpanded() => IsExpanded = !IsExpanded;
+
+    public MixerViewModel(AudioService audio, DispatcherQueue dispatcher, bool expanded, Action<bool> saveExpanded)
     {
         _audio = audio;
         _dispatcher = dispatcher;
+        _isExpanded = expanded;
+        _saveExpanded = saveExpanded;
         Apps.CollectionChanged += (_, _) => OnPropertyChanged(nameof(EmptyVisibility));
 
         audio.AppAdded += (_, app) => _dispatcher.TryEnqueue(() => Add(app));
@@ -85,6 +111,7 @@ public sealed partial class MixerViewModel : ObservableObject
     {
         var id = _audio.GetAppOutput(app.App);
         var device = id == null ? null : devices.FirstOrDefault(d => string.Equals(d.Id, id, StringComparison.OrdinalIgnoreCase));
+        app.DefaultOutputName = devices.FirstOrDefault(d => d.IsDefault)?.Name ?? "Default output";
         app.RoutedTo = device == null || device.IsDefault ? null : device.Name;
     }
 
@@ -126,7 +153,7 @@ public sealed partial class MixerViewModel : ObservableObject
     private void Add(AudioApp app)
     {
         if (Apps.Any(vm => vm.App == app)) return;
-        var vm = new AppVolumeViewModel(app, _dispatcher);
+        var vm = new AppVolumeViewModel(app, _dispatcher) { IsExpanded = IsExpanded };
 
         // Apps in order of appearance; system sounds always last, like the Windows mixer.
         int index = app.IsSystemSounds
@@ -142,5 +169,21 @@ public sealed partial class MixerViewModel : ObservableObject
         if (vm == null) return;
         vm.Dispose();
         Apps.Remove(vm);
+    }
+}
+
+/// <summary>Widths shared by the mixer window and its rows, in DIPs.</summary>
+public static class MixerLayout
+{
+    public const double NarrowWidth = 360, IconOutputWidth = 28, ExpandedOutputWidth = 128;
+
+    /// <summary>Wide, the window grows by exactly what the output buttons gain: the sliders keep their length.</summary>
+    public static double Width(bool expanded) => expanded ? NarrowWidth + ExpandedOutputWidth - IconOutputWidth : NarrowWidth;
+
+    /// <summary>A device's name without the adapter Windows adds in brackets: "Headphones (CS43131 HIFI Audio)" → "Headphones".</summary>
+    public static string ShortName(string name)
+    {
+        int bracket = name.IndexOf(" (", StringComparison.Ordinal);
+        return bracket > 0 ? name[..bracket] : name;
     }
 }
