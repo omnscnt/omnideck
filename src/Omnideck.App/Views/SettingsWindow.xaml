@@ -74,6 +74,11 @@
                         <FontIcon Glyph="&#xE90E;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="Mixer" Tag="mixer">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9E9;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="OSD" Tag="osd">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE7F4;" />
@@ -931,52 +936,11 @@
                 </Grid>
                 </ScrollViewer>
 
-                <!-- General page -->
-                <ScrollViewer x:Name="GeneralPage" Visibility="Collapsed">
-                <Grid x:Name="GeneralContent" Padding="36,8,36,36">
+                <!-- Mixer page -->
+                <ScrollViewer x:Name="MixerPage" Visibility="Collapsed">
+                <Grid x:Name="MixerContent" Padding="36,8,36,36">
                     <StackPanel Spacing="4">
-                        <TextBlock Margin="0,0,0,16" Style="{StaticResource TitleTextBlockStyle}" Text="General" />
-
-                        <Border Style="{StaticResource SettingsCardStyle}">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Start with Windows" />
-                                    <TextBlock
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        TextWrapping="Wrap"
-                                        Text="Starts quietly in the notification area when you sign in." />
-                                </StackPanel>
-                                <ToggleSwitch
-                                    x:Name="AutoStartSwitch"
-                                    MinWidth="0"
-                                    Grid.Column="1" HorizontalAlignment="Right"
-                                    AutomationProperties.Name="Start with Windows"
-                                    Toggled="OnAutoStartToggled" />
-                            </Grid>
-                        </Border>
-
-                        <Border Style="{StaticResource SettingsCardStyle}">
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Windows sound settings" />
-                                    <TextBlock
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        TextWrapping="Wrap"
-                                        Text="Devices, formats and the system volume mixer." />
-                                </StackPanel>
-                                <Button Grid.Column="1" HorizontalAlignment="Right" Click="OnWindowsSoundClick" Content="Open" />
-                            </Grid>
-                        </Border>
+                        <TextBlock Margin="0,0,0,16" Style="{StaticResource TitleTextBlockStyle}" Text="Mixer" />
 
                         <Border Style="{StaticResource SettingsCardStyle}">
                             <Grid ColumnSpacing="16">
@@ -1066,6 +1030,56 @@
                                     Grid.Column="1" HorizontalAlignment="Right"
                                     AutomationProperties.Name="Full device names"
                                     Toggled="OnMixerLayoutChanged" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+                </ScrollViewer>
+
+                <!-- General page -->
+                <ScrollViewer x:Name="GeneralPage" Visibility="Collapsed">
+                <Grid x:Name="GeneralContent" Padding="36,8,36,36">
+                    <StackPanel Spacing="4">
+                        <TextBlock Margin="0,0,0,16" Style="{StaticResource TitleTextBlockStyle}" Text="General" />
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Start with Windows" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Starts quietly in the notification area when you sign in." />
+                                </StackPanel>
+                                <ToggleSwitch
+                                    x:Name="AutoStartSwitch"
+                                    MinWidth="0"
+                                    Grid.Column="1" HorizontalAlignment="Right"
+                                    AutomationProperties.Name="Start with Windows"
+                                    Toggled="OnAutoStartToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Windows sound settings" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Devices, formats and the system volume mixer." />
+                                </StackPanel>
+                                <Button Grid.Column="1" HorizontalAlignment="Right" Click="OnWindowsSoundClick" Content="Open" />
                             </Grid>
                         </Border>
 

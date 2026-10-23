@@ -162,6 +162,7 @@ public sealed partial class SettingsWindow : Window
         WidgetContent.Padding = new Thickness(side, 8, side, 36);
         GeneralContent.Padding = new Thickness(side, 8, side, 36);
         OsdContentGrid.Padding = new Thickness(side, 8, side, 36);
+        MixerContent.Padding = new Thickness(side, 8, side, 36);
     }
 
     private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -171,6 +172,7 @@ public sealed partial class SettingsWindow : Window
         GeneralPage.Visibility = tag == "general" ? Visibility.Visible : Visibility.Collapsed;
         WidgetPage.Visibility = tag == "widget" ? Visibility.Visible : Visibility.Collapsed;
         OsdPage.Visibility = tag == "osd" ? Visibility.Visible : Visibility.Collapsed;
+        MixerPage.Visibility = tag == "mixer" ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>Adds a blank hotkey above the add card; its card unfolds and starts recording (see HotkeyCard).</summary>

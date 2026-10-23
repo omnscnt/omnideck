@@ -55,7 +55,9 @@ public sealed partial class FlyoutWindow : Window
 
         Activated += OnActivated;
         ViewModel.Apps.CollectionChanged += (_, _) => QueueResize();
-        ViewModel.PropertyChanged += (_, _) => QueueResize();
+        // Mid-widening the frame callback sizes the window itself, in step with the content.
+        ViewModel.PropertyChanged += (_, _) => { if (!_expanding) QueueResize(); };
+        ViewModel.ExpandToggled += StartExpand;
 
         // No DWM show/hide transition: the slide is the animation, and a fade after it reads as a glitch.
         int disabled = 1;
@@ -225,6 +227,46 @@ public sealed partial class FlyoutWindow : Window
             var done = _slideDone;
             _slideDone = null;
             done?.Invoke();
+        }
+    }
+
+    // ---- widening: window and output buttons grow together ------------------------------------------
+
+    private const double ExpandMs = 240;
+    private readonly System.Diagnostics.Stopwatch _expandClock = new();
+    private double _expandFrom;
+    private bool _expanding;
+
+    /// <summary>
+    /// Eases the mixer between narrow and wide on composition frames (like the slide), sizing the
+    /// window in the same frame as the content, so the two never drift apart. Closed, it just jumps.
+    /// </summary>
+    private void StartExpand()
+    {
+        double target = ViewModel.IsExpanded ? 1 : 0;
+        if (!_isOpen)
+        {
+            ViewModel.ExpandProgress = target;
+            return;
+        }
+        _expandFrom = ViewModel.ExpandProgress;
+        _expandClock.Restart();
+        if (_expanding) return;
+        _expanding = true;
+        CompositionTarget.Rendering += OnExpandFrame;
+    }
+
+    private void OnExpandFrame(object? sender, object? e)
+    {
+        double t = Math.Clamp(_expandClock.Elapsed.TotalMilliseconds / ExpandMs, 0, 1);
+        double eased = t < 0.5 ? 4 * t * t * t : 1 - Math.Pow(-2 * t + 2, 3) / 2; // ease-in-out cubic
+        double target = ViewModel.IsExpanded ? 1 : 0;
+        ViewModel.ExpandProgress = _expandFrom + (target - _expandFrom) * eased;
+        UpdateBounds();
+        if (t >= 1)
+        {
+            CompositionTarget.Rendering -= OnExpandFrame;
+            _expanding = false;
         }
     }
 

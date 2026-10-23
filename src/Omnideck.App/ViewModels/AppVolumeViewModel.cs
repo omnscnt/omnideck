@@ -51,7 +51,7 @@ public sealed partial class AppVolumeViewModel : VolumeViewModelBase, IDisposabl
     public string OutputToolTip => RoutedTo != null ? $"Plays on {RoutedTo}" : $"Plays on the default output ({DefaultOutputName})";
 
     /// <summary>Its own device stands out; following the default stays quiet.</summary>
-    public double OutputOpacity => RoutedTo != null ? 1 : 0.55;
+    public double OutputOpacity => RoutedTo != null ? 1 : 0.8;
 
     public Visibility OutputColumnVisibility => OutputsEnabled ? Visibility.Visible : Visibility.Collapsed;
 

@@ -40,7 +40,7 @@
                     <Setter Property="Background" Value="Transparent" />
                     <Setter Property="BorderBrush" Value="{ThemeResource SurfaceStrokeColorDefaultBrush}" />
                     <Setter Property="BorderThickness" Value="1" />
-                    <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
                 </Style>
                 <Style x:Key="PickerItemStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
                     <Setter Property="HorizontalAlignment" Value="Stretch" />
@@ -225,7 +225,7 @@
                                             Text="{x:Bind PercentText, Mode=OneWay}" />
 
                                         <!-- Where it plays: an icon, or (wide mixer) the device's name. Opens the device picker. -->
-                                        <Border Grid.Column="4" Width="{x:Bind OutputButtonWidth, Mode=OneWay}" Visibility="{x:Bind OutputColumnVisibility, Mode=OneWay}">
+                                        <Border Grid.Column="4" Margin="4,0,0,0" Width="{x:Bind OutputButtonWidth, Mode=OneWay}" Visibility="{x:Bind OutputColumnVisibility, Mode=OneWay}">
                                             <Button
                                                 HorizontalAlignment="Stretch"
                                                 HorizontalContentAlignment="Stretch"

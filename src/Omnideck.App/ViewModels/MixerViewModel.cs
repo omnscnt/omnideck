@@ -59,9 +59,6 @@ public sealed partial class MixerViewModel : ObservableObject
         : MixerLayout.NarrowWidth;
 
     private readonly Action<bool> _saveExpanded;
-    private DispatcherQueueTimer? _expandTimer;
-    private double _expandFrom, _expandStart;
-    private const double ExpandSeconds = 0.22;
 
     [RelayCommand]
     private void ToggleExpanded() => IsExpanded = !IsExpanded;
@@ -69,28 +66,11 @@ public sealed partial class MixerViewModel : ObservableObject
     partial void OnIsExpandedChanged(bool value)
     {
         _saveExpanded(value);
-        // Ease the width over: window, output buttons and their contents together.
-        _expandFrom = ExpandProgress;
-        _expandStart = Now;
-        if (_expandTimer == null)
-        {
-            _expandTimer = _dispatcher.CreateTimer();
-            _expandTimer.Interval = TimeSpan.FromMilliseconds(15);
-            _expandTimer.Tick += (_, _) => StepExpand();
-        }
-        _expandTimer.Start();
+        ExpandToggled?.Invoke(); // the window eases ExpandProgress over, frame by frame
     }
 
-    private static double Now => System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
-
-    private void StepExpand()
-    {
-        double t = Math.Clamp((Now - _expandStart) / ExpandSeconds, 0, 1);
-        double eased = 1 - Math.Pow(1 - t, 3);
-        double target = IsExpanded ? 1 : 0;
-        ExpandProgress = _expandFrom + (target - _expandFrom) * eased;
-        if (t >= 1) _expandTimer!.Stop();
-    }
+    /// <summary>Raised when <see cref="IsExpanded"/> flips: the window animates <see cref="ExpandProgress"/> to it.</summary>
+    public event Action? ExpandToggled;
 
     partial void OnExpandProgressChanged(double value)
     {
