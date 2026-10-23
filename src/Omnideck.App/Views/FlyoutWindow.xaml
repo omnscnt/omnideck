@@ -73,7 +73,8 @@
             </Grid.RowDefinitions>
 
             <!-- Master volume, on the base layer -->
-            <StackPanel Padding="{x:Bind ViewModel.MasterPadding, Mode=OneWay}">
+            <!-- Right: as far in as the boxes at the end of the app rows below. -->
+            <StackPanel Padding="19,10,13,8">
                 <!-- "Output" label + current device, which opens the device picker -->
                 <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
@@ -174,7 +175,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:AppVolumeViewModel">
                                 <Border
-                                    Padding="{x:Bind RowPadding, Mode=OneWay}"
+                                    Padding="10,4,4,4"
                                     Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1"

@@ -43,7 +43,7 @@ public sealed partial class AppVolumeViewModel : VolumeViewModelBase, IDisposabl
     private bool _fullNames;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(OutputColumnVisibility), nameof(RowPadding))]
+    [NotifyPropertyChangedFor(nameof(OutputColumnVisibility))]
     private bool _outputsEnabled = true;
 
     public string OutputLabel => FullNames ? RoutedTo ?? DefaultOutputName : MixerLayout.ShortName(RoutedTo ?? DefaultOutputName);
@@ -61,9 +61,6 @@ public sealed partial class AppVolumeViewModel : VolumeViewModelBase, IDisposabl
     public double OutputButtonWidth => MixerLayout.IconOutputWidth + (ExpandedOutputWidth - MixerLayout.IconOutputWidth) * ExpandProgress;
     public double OutputIconOpacity => Math.Clamp(1 - ExpandProgress * 2, 0, 1);
     public double OutputNameOpacity => Math.Clamp(ExpandProgress * 2 - 1, 0, 1);
-
-    /// <summary>The output button sits as far from the card's right edge as from its top; a percentage needs more room.</summary>
-    public Thickness RowPadding => new(10, 4, OutputsEnabled ? 4 : 12, 4);
 
 
     public string FallbackGlyph => App.IsSystemSounds ? "" : "";

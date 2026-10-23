@@ -38,7 +38,7 @@ public sealed partial class MixerViewModel : ObservableObject
 
     /// <summary>Apps get output buttons (a setting; off also when Windows doesn't support it).</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(OutputsVisibility), nameof(MasterPadding))]
+    [NotifyPropertyChangedFor(nameof(OutputsVisibility))]
     private bool _outputsEnabled = true;
 
     private double _expandedOutputWidth = MixerLayout.DefaultExpandedOutputWidth;
@@ -48,9 +48,6 @@ public sealed partial class MixerViewModel : ObservableObject
     public bool FullNames => _fullNames;
 
     public Visibility OutputsVisibility => OutputsEnabled ? Visibility.Visible : Visibility.Collapsed;
-
-    /// <summary>The master row reaches as far right as the rows below: their output buttons, or their percentages.</summary>
-    public Thickness MasterPadding => new(19, 10, OutputsEnabled ? 13 : 21, 8);
 
     // A chevron toward where the mixer grows (left, from the tray), and back.
     public string ExpandGlyph => IsExpanded ? "" : "";
