@@ -471,7 +471,7 @@ public sealed partial class FlyoutWindow : Window
 
     // ---- the batteries' plaque -----------------------------------------------------------------------
 
-    private const double PanelGapDip = 6; // between the plaque and the mixer: close, a pair
+    private const double PanelGapDip = 3; // between the plaque and the mixer: close, a pair
     private readonly BatteryPanelWindow _panel;
     private RectInt32 _panelTarget;
     private bool _panelShown; // shown with the mixer (decided as it opens, or when batteries come or go)
