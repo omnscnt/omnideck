@@ -57,11 +57,6 @@ public sealed partial class MixerViewModel : ObservableObject
     public string ExpandToolTip => IsExpanded ? "Narrow mixer" : "Show each app's output device";
 
     /// <summary>The window's width now (mid-animation too).</summary>
-    /// <summary>The window's width when wide.</summary>
-    public double WideWindowWidth => OutputsEnabled
-        ? MixerLayout.NarrowWidth + _expandedOutputWidth - MixerLayout.IconOutputWidth
-        : MixerLayout.NarrowWidth;
-
     public double WindowWidth => OutputsEnabled
         ? MixerLayout.NarrowWidth + (_expandedOutputWidth - MixerLayout.IconOutputWidth) * ExpandProgress
         : MixerLayout.NarrowWidth;

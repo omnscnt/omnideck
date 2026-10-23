@@ -20,8 +20,7 @@ namespace Omnideck.Views;
 /// <summary>Borderless acrylic flyout that pops up next to the tray, Windows 11 quick-settings style.</summary>
 public sealed partial class FlyoutWindow : Window
 {
-    // Clipped (see EnterClipped), the window is held at the wide width and a region shows the part in use.
-    private double WidthDip => _clipped ? ViewModel.WideWindowWidth : ViewModel.WindowWidth;
+    private double WidthDip => ViewModel.WindowWidth;
     private const double MarginDip = 12;
     private const double MaxAppsHeightDip = 540;
 
@@ -147,7 +146,6 @@ public sealed partial class FlyoutWindow : Window
             // auto-hidden taskbar nothing covers them) for the frame or two that Hide takes. Show re-cloaks anyway.
             SetCloaked(true);
             AppWindow.Hide();
-            ExitClipped(); // (narrowed while closing)
         });
     }
 
@@ -278,7 +276,6 @@ public sealed partial class FlyoutWindow : Window
         }
         _expandFrom = ViewModel.ExpandProgress;
         _expandClock.Restart();
-        if (_anchor.Edge != TaskbarEdge.Left) EnterClipped(); // a left taskbar: the window grows rightward, its left edge stays
         if (_expanding) return;
         _expanding = true;
         CompositionTarget.Rendering += OnExpandFrame;
@@ -290,103 +287,14 @@ public sealed partial class FlyoutWindow : Window
         double eased = t < 0.5 ? 4 * t * t * t : 1 - Math.Pow(-2 * t + 2, 3) / 2; // ease-in-out cubic
         double target = ViewModel.IsExpanded ? 1 : 0;
         ViewModel.ExpandProgress = _expandFrom + (target - _expandFrom) * eased;
-        if (_clipped) RootGrid.Width = ViewModel.WindowWidth;
         UpdateBounds();
+        PaintGrowBackground();
         if (t >= 1)
         {
             CompositionTarget.Rendering -= OnExpandFrame;
             _expanding = false;
-            // Wide: the window is wide already, just drop the region. Narrow: back to the narrow window (its
-            // shadow goes around the whole window, so it can't stay wide behind a region). That moves the left
-            // edge, and the last frame would jump for a moment: hidden until XAML has drawn the new one.
-            if (ViewModel.IsExpanded) ExitClipped();
-            else
-            {
-                SetCloaked(true);
-                ExitClipped();
-                int frames = 0;
-                void Reveal(object? s, object? a)
-                {
-                    if (++frames < 2) return;
-                    CompositionTarget.Rendering -= Reveal;
-                    if (_isOpen) SetCloaked(false);
-                }
-                CompositionTarget.Rendering += Reveal;
-            }
         }
     }
-
-    // ---- clipped: the window stays wide, a region shows the part in use ----------------------------
-
-    // Windows draws a window's last frame from its left edge: when the left edge moves (the mixer grows
-    // leftward from the tray), everything jumps sideways for a frame until XAML catches up, the right edge
-    // most of all. So while widening, the window keeps its wide size and position, and a region cuts it
-    // to the width in use; the content is laid out right-aligned at that width. A region's corners are
-    // plain and the shadow still goes around the whole window, so it lasts only for the animation.
-    private bool _clipped;
-    private (int, int, int, int, int) _regionShape; // the region in place, to set it only when it changes
-
-    private void EnterClipped()
-    {
-        if (_clipped) return;
-        _clipped = true;
-        SetSystemBorder(false);
-        // Windows' border colour, so the outline doesn't change when the region takes over.
-        ClipEdge.BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(RootGrid.ActualTheme == ElementTheme.Light
-            ? Windows.UI.Color.FromArgb(255, 0xC9, 0xC9, 0xC9) : Windows.UI.Color.FromArgb(255, 0x40, 0x40, 0x40));
-        ClipEdge.Visibility = Visibility.Visible;
-        RootGrid.HorizontalAlignment = HorizontalAlignment.Right;
-        RootGrid.Width = ViewModel.WindowWidth;
-        UpdateBounds(); // widening from narrow: the one move of the left edge, with the region already on
-        PaintGrowBackground();
-    }
-
-    private void ExitClipped()
-    {
-        if (!_clipped) return;
-        _clipped = false;
-        SetWindowRgn(_hwnd, IntPtr.Zero, true);
-        _regionShape = default;
-        SetSystemBorder(true);
-        ClipEdge.Visibility = Visibility.Collapsed;
-        RootGrid.ClearValue(FrameworkElement.WidthProperty);
-        RootGrid.HorizontalAlignment = HorizontalAlignment.Stretch;
-        if (_isOpen) UpdateBounds();
-    }
-
-    /// <summary>The region: the right part of the window, as wide as the mixer is now, with rounded corners.</summary>
-    private void ClipTo(double scale)
-    {
-        // Window coordinates of the client area: the frame keeps a few non-client pixels, which must stay out.
-        if (!GetWindowRect(_hwnd, out var window) || !GetClientRect(_hwnd, out var client)) return;
-        var origin = new POINT();
-        ClientToScreen(_hwnd, ref origin);
-        int left = origin.X - window.Left, top = origin.Y - window.Top;
-        int visible = Math.Min(client.Right, (int)Math.Round(ViewModel.WindowWidth * scale));
-        int corner = (int)Math.Round(16 * scale); // the ellipse's size: an 8 DIP radius, like the system's
-        // Moving (following the taskbar) leaves it as it is: a region is relative to the window.
-        var shape = (left + client.Right - visible, top, left + client.Right + 1, top + client.Bottom + 1, corner);
-        if (shape == _regionShape) return;
-        _regionShape = shape;
-        var region = CreateRoundRectRgn(left + client.Right - visible, top, left + client.Right + 1, top + client.Bottom + 1, corner, corner);
-        SetWindowRgn(_hwnd, region, true); // the window owns the region from here
-    }
-
-    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-    private struct POINT { public int X, Y; }
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
-    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr hwnd, ref POINT point);
-
-    /// <summary>Windows' thin border: drawn around the whole window, region or not, so off while clipped (the outline is ours then).</summary>
-    private void SetSystemBorder(bool on)
-    {
-        int color = on ? unchecked((int)0xFFFFFFFF) /* DWMWA_COLOR_DEFAULT */ : unchecked((int)0xFFFFFFFE) /* DWMWA_COLOR_NONE */;
-        DwmSetWindowAttribute(_hwnd, 34 /* DWMWA_BORDER_COLOR */, ref color, sizeof(int));
-    }
-
-    [System.Runtime.InteropServices.DllImport("gdi32.dll")] private static extern IntPtr CreateRoundRectRgn(int x1, int y1, int x2, int y2, int w, int h);
-    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int SetWindowRgn(IntPtr hwnd, IntPtr region, bool redraw);
 
     private bool _cloaked;
     private int _cloakedFrames;
@@ -403,9 +311,6 @@ public sealed partial class FlyoutWindow : Window
 
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
-
-    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
-    private static extern int DwmFlush();
 
     /// <summary>
     /// Window position pushed toward the taskbar by <paramref name="away"/> (0..1) of the slide distance:
@@ -504,7 +409,7 @@ public sealed partial class FlyoutWindow : Window
         double workHeightDip = anchor.WorkArea.Height / scale;
 
         AppsScroller.MaxHeight = Math.Max(120, Math.Min(MaxAppsHeightDip, workHeightDip - 260));
-        Card.Measure(new Size(ViewModel.WindowWidth, double.PositiveInfinity));
+        Card.Measure(new Size(WidthDip, double.PositiveInfinity));
         double heightDip = Math.Min(Card.DesiredSize.Height, workHeightDip - 2 * MarginDip);
 
         // Size the client area, not the frame: the border-only presenter still reserves a few
@@ -522,7 +427,6 @@ public sealed partial class FlyoutWindow : Window
         // Mid-slide the frame callback owns the position; only take the new size.
         if (_sliding) AppWindow.Resize(new SizeInt32(width, height));
         else AppWindow.MoveAndResize(_target);
-        if (_clipped) ClipTo(scale);
     }
 
     // ---- events ------------------------------------------------------------------------------
