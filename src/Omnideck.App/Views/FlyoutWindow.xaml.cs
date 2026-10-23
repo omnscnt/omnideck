@@ -147,7 +147,7 @@ public sealed partial class FlyoutWindow : Window
             // auto-hidden taskbar nothing covers them) for the frame or two that Hide takes. Show re-cloaks anyway.
             SetCloaked(true);
             AppWindow.Hide();
-            ExitClipped(); // it opens at its own width next time
+            ExitClipped(); // (narrowed while closing)
         });
     }
 
@@ -296,7 +296,23 @@ public sealed partial class FlyoutWindow : Window
         {
             CompositionTarget.Rendering -= OnExpandFrame;
             _expanding = false;
-            if (ViewModel.IsExpanded) ExitClipped(); // the window is wide already: just drop the region
+            // Wide: the window is wide already, just drop the region. Narrow: back to the narrow window (its
+            // shadow goes around the whole window, so it can't stay wide behind a region). That moves the left
+            // edge, and the last frame would jump for a moment: hidden until XAML has drawn the new one.
+            if (ViewModel.IsExpanded) ExitClipped();
+            else
+            {
+                SetCloaked(true);
+                ExitClipped();
+                int frames = 0;
+                void Reveal(object? s, object? a)
+                {
+                    if (++frames < 2) return;
+                    CompositionTarget.Rendering -= Reveal;
+                    if (_isOpen) SetCloaked(false);
+                }
+                CompositionTarget.Rendering += Reveal;
+            }
         }
     }
 
@@ -305,9 +321,8 @@ public sealed partial class FlyoutWindow : Window
     // Windows draws a window's last frame from its left edge: when the left edge moves (the mixer grows
     // leftward from the tray), everything jumps sideways for a frame until XAML catches up, the right edge
     // most of all. So while widening, the window keeps its wide size and position, and a region cuts it
-    // to the width in use; the content is laid out right-aligned at that width. Only a region's corners
-    // are plain (no system rounding, border or shadow), so it lasts only while needed: until widened
-    // fully, or after narrowing until the mixer closes (narrowing back would move the left edge again).
+    // to the width in use; the content is laid out right-aligned at that width. A region's corners are
+    // plain and the shadow still goes around the whole window, so it lasts only for the animation.
     private bool _clipped;
     private (int, int, int, int, int) _regionShape; // the region in place, to set it only when it changes
 
@@ -363,7 +378,7 @@ public sealed partial class FlyoutWindow : Window
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr hwnd, ref POINT point);
 
-    /// <summary>Windows 11's thin window border: drawn around the whole window, region or not.</summary>
+    /// <summary>Windows' thin border: drawn around the whole window, region or not, so off while clipped (the outline is ours then).</summary>
     private void SetSystemBorder(bool on)
     {
         int color = on ? unchecked((int)0xFFFFFFFF) /* DWMWA_COLOR_DEFAULT */ : unchecked((int)0xFFFFFFFE) /* DWMWA_COLOR_NONE */;
@@ -388,6 +403,9 @@ public sealed partial class FlyoutWindow : Window
 
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmFlush();
 
     /// <summary>
     /// Window position pushed toward the taskbar by <paramref name="away"/> (0..1) of the slide distance:
