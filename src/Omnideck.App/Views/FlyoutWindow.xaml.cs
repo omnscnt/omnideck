@@ -453,8 +453,12 @@ public sealed partial class FlyoutWindow : Window
         var panelClient = _panel.AppWindow.ClientSize;
         int panelHeight = (int)Math.Ceiling(BatteryPanelWindow.HeightDip * scale) + (panelFrame.Height - panelClient.Height);
         int panelWidth = width - (frame.Width - client.Width) + (panelFrame.Width - panelClient.Width);
+        // The gap is between what shows: a window's frame has invisible borders (resize margins) at the
+        // sides and bottom, which would otherwise widen it. Above, the plaque's bottom one overlaps the mixer.
         int gap = (int)Math.Round(PanelGapDip * scale);
-        int panelY = anchor.Edge == TaskbarEdge.Top ? y + height + gap : y - gap - panelHeight;
+        int panelY = anchor.Edge == TaskbarEdge.Top
+            ? y + height - InvisibleBottom(_hwnd, frame.Width - client.Width) + gap
+            : y - gap - panelHeight + InvisibleBottom(_panel.Handle, panelFrame.Width - panelClient.Width);
         _panelTarget = new RectInt32(x, panelY, panelWidth, panelHeight);
         // Mid-slide the frame callback owns the position; only take the new size.
         if (_sliding)
@@ -471,12 +475,30 @@ public sealed partial class FlyoutWindow : Window
 
     // ---- the batteries' plaque -----------------------------------------------------------------------
 
-    private const double PanelGapDip = 3; // between the plaque and the mixer: close, a pair
+    private const double PanelGapDip = 4; // between the visible edges of the plaque and the mixer: close, a pair
     private readonly BatteryPanelWindow _panel;
     private RectInt32 _panelTarget;
     private bool _panelShown; // shown with the mixer (decided as it opens, or when batteries come or go)
 
     private bool PanelWanted => ViewModel.BatteriesVisibility == Visibility.Visible;
+
+    /// <summary>
+    /// How far a window's frame reaches below what shows of it (DWM's visible bounds). Before it was ever
+    /// shown DWM can't say: then half the frame's width over the client's, less the 1 px border that shows.
+    /// </summary>
+    private static int InvisibleBottom(IntPtr hwnd, int nonClientWidth)
+    {
+        if (GetWindowRect(hwnd, out var window) && DwmGetWindowAttribute(hwnd, 9 /* DWMWA_EXTENDED_FRAME_BOUNDS */, out var visible, 16) == 0
+            && visible.Bottom > visible.Top && window.Bottom >= visible.Bottom)
+            return window.Bottom - visible.Bottom;
+        return Math.Max(0, nonClientWidth / 2 - 1);
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct WINRECT { public int Left, Top, Right, Bottom; }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out WINRECT rect);
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out WINRECT value, int size);
 
     /// <summary>The plaque follows the mixer's slide, offset just as far.</summary>
     private void MovePanel(double away)
