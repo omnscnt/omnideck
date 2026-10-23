@@ -109,7 +109,7 @@ public sealed partial class FlyoutWindow : Window
         QueueResize(); // Item templates realize on the first layout pass; re-measure once they exist.
         ViewModel.StartMetering();
         ViewModel.RefreshRouting();
-        App.Instance.RefreshBatteries();
+        App.Instance.SetMixerOpen(true);
         _taskbarWatch.Start();
 
         StartSlide(entering: true, ShowDuration, onDone: null);
@@ -151,6 +151,7 @@ public sealed partial class FlyoutWindow : Window
         _hasFocus = false;
         _lastHidden = DateTime.UtcNow;
         ViewModel.StopMetering();
+        App.Instance.SetMixerOpen(false);
 
         StartSlide(entering: false, HideDuration, onDone: () =>
         {
@@ -340,7 +341,7 @@ public sealed partial class FlyoutWindow : Window
     {
         int margin = (int)Math.Round(MarginDip * _anchor.Scale);
         // Up from (or down to) the taskbar the plaque travels too: the slide covers it, so it hides behind the taskbar as well.
-        int panel = _panelShown && _anchor.Edge is TaskbarEdge.Top or TaskbarEdge.Bottom ? _panelTarget.Height + margin : 0;
+        int panel = _panelShown && _anchor.Edge is TaskbarEdge.Top or TaskbarEdge.Bottom ? _panelTarget.Height + (int)Math.Round(PanelGapDip * _anchor.Scale) : 0;
         int travel = _anchor.Edge is TaskbarEdge.Left or TaskbarEdge.Right ? _target.Width + margin : _target.Height + margin + panel;
         int d = (int)Math.Round(travel * away);
         return _anchor.Edge switch
@@ -432,7 +433,7 @@ public sealed partial class FlyoutWindow : Window
 
         AppsScroller.MaxHeight = Math.Max(120, Math.Min(MaxAppsHeightDip, workHeightDip - 260));
         Card.Measure(new Size(WidthDip, double.PositiveInfinity));
-        double panelDip = _panelShown ? BatteryPanelWindow.HeightDip + MarginDip : 0; // the plaque above takes its share
+        double panelDip = _panelShown ? BatteryPanelWindow.HeightDip + PanelGapDip : 0; // the plaque above takes its share
         double heightDip = Math.Min(Card.DesiredSize.Height, workHeightDip - 2 * MarginDip - panelDip);
 
         // Size the client area, not the frame: the border-only presenter still reserves a few
@@ -447,12 +448,13 @@ public sealed partial class FlyoutWindow : Window
         int y = anchor.Edge == TaskbarEdge.Top ? anchor.WorkArea.Y + margin : anchor.Bottom - margin - height;
 
         _target = new RectInt32(x, y, width, height);
-        // The plaque: as wide as the mixer, a margin away on the side away from the taskbar.
+        // The plaque: as wide as the mixer, a small gap away on the side away from the taskbar.
         var panelFrame = _panel.AppWindow.Size;
         var panelClient = _panel.AppWindow.ClientSize;
         int panelHeight = (int)Math.Ceiling(BatteryPanelWindow.HeightDip * scale) + (panelFrame.Height - panelClient.Height);
         int panelWidth = width - (frame.Width - client.Width) + (panelFrame.Width - panelClient.Width);
-        int panelY = anchor.Edge == TaskbarEdge.Top ? y + height + margin : y - margin - panelHeight;
+        int gap = (int)Math.Round(PanelGapDip * scale);
+        int panelY = anchor.Edge == TaskbarEdge.Top ? y + height + gap : y - gap - panelHeight;
         _panelTarget = new RectInt32(x, panelY, panelWidth, panelHeight);
         // Mid-slide the frame callback owns the position; only take the new size.
         if (_sliding)
@@ -469,6 +471,7 @@ public sealed partial class FlyoutWindow : Window
 
     // ---- the batteries' plaque -----------------------------------------------------------------------
 
+    private const double PanelGapDip = 6; // between the plaque and the mixer: close, a pair
     private readonly BatteryPanelWindow _panel;
     private RectInt32 _panelTarget;
     private bool _panelShown; // shown with the mixer (decided as it opens, or when batteries come or go)

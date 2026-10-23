@@ -791,7 +791,9 @@ public sealed partial class SettingsWindow : Window
 
     private void ShowBatteries(IReadOnlyList<Omnideck.Core.Devices.DeviceBattery> devices)
     {
-        DevicesList.ItemsSource = devices.Select(d => new BatteryChip(d, _devices.LowThreshold)).ToList();
+        DevicesList.ItemsSource = devices
+            .Select(d => new DeviceRow(new BatteryChip(d, _devices.LowThreshold), !_devices.HiddenDevices.Contains(d.Name), OnDeviceShownChanged))
+            .ToList();
         DevicesEmptyText.Visibility = devices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         DevicesEmptyText.Text = _devices.Enabled
             ? "No device with a readable battery found. A mouse that is off or asleep doesn't answer."
@@ -826,7 +828,15 @@ public sealed partial class SettingsWindow : Window
         ShowBatteries(App.Instance.Batteries);
     }
 
-    private void OnDevicesRefresh(object sender, RoutedEventArgs e) => App.Instance.RefreshBatteries(force: true);
+    private void OnDevicesRefresh(object sender, RoutedEventArgs e) => App.Instance.RefreshBatteries();
+
+    /// <summary>A device's toggle: on the plaque (and the low battery notice) or left off it.</summary>
+    private void OnDeviceShownChanged(DeviceRow row)
+    {
+        _devices.HiddenDevices.Remove(row.Chip.Name);
+        if (!row.IsShown) _devices.HiddenDevices.Add(row.Chip.Name);
+        App.Instance.ApplyDeviceSettings(_devices);
+    }
 
     // ---- mixer: output device per app ---------------------------------------------------------------
 

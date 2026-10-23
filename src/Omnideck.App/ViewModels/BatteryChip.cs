@@ -14,9 +14,11 @@ public sealed class BatteryChip(DeviceBattery device, int lowThreshold)
 
     public Visibility ChargingVisibility => device.IsCharging ? Visibility.Visible : Visibility.Collapsed;
 
-    /// <summary>Low and not charging: in the system's critical colour.</summary>
+    /// <summary>Charging in the system's success green, low (and not charging) in its critical red.</summary>
     public Brush LevelBrush => (Brush)Application.Current.Resources[
-        !device.IsCharging && device.Level <= lowThreshold ? "SystemFillColorCriticalBrush" : "TextFillColorPrimaryBrush"];
+        device.IsCharging ? "SystemFillColorSuccessBrush"
+        : device.Level <= lowThreshold ? "SystemFillColorCriticalBrush"
+        : "TextFillColorPrimaryBrush"];
 
     public string ToolTip => $"{device.Name}: {device.Level}%{(device.IsCharging ? ", charging" : "")}";
 

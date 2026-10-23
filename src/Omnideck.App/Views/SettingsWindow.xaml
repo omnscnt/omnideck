@@ -1071,23 +1071,27 @@
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:BatteryChip">
-                                            <Border Padding="12,8" Background="{ThemeResource ControlAltFillColorSecondaryBrush}" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="5">
+                                        <DataTemplate x:DataType="vm:DeviceRow">
+                                            <Border Padding="12,6,8,6" Background="{ThemeResource ControlAltFillColorSecondaryBrush}" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="5">
                                                 <Grid ColumnSpacing="12">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto" />
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
                                                     </Grid.ColumnDefinitions>
-                                                    <FontIcon VerticalAlignment="Center" FontSize="16" Glyph="{x:Bind Glyph}" />
+                                                    <FontIcon VerticalAlignment="Center" FontSize="16" Glyph="{x:Bind Chip.Glyph}" />
                                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                        <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" />
-                                                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="{x:Bind Source}" />
+                                                        <TextBlock Text="{x:Bind Chip.Name}" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="{x:Bind Chip.Source}" />
                                                     </StackPanel>
                                                     <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal" Spacing="4">
-                                                        <FontIcon FontSize="12" Glyph="&#xE945;" Visibility="{x:Bind ChargingVisibility}" />
-                                                        <TextBlock Foreground="{x:Bind LevelBrush}" Text="{x:Bind LevelText}" />
+                                                        <FontIcon FontSize="12" Foreground="{x:Bind Chip.LevelBrush}" Glyph="&#xE945;" Visibility="{x:Bind Chip.ChargingVisibility}" />
+                                                        <TextBlock Foreground="{x:Bind Chip.LevelBrush}" Text="{x:Bind Chip.LevelText}" />
                                                     </StackPanel>
+                                                    <!-- Shown on the plaque (and watched for a low battery), or not. -->
+                                                    <ToggleSwitch Grid.Column="3" MinWidth="0" Margin="12,0,-4,0" VerticalAlignment="Center" OffContent="" OnContent=""
+                                                        AutomationProperties.Name="Show this device" ToolTipService.ToolTip="Show on the plaque" IsOn="{x:Bind IsShown, Mode=TwoWay}" />
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
@@ -1132,7 +1136,7 @@
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
                                         TextWrapping="Wrap"
-                                        Text="Batteries change slowly. Opening the mixer checks too, if the last check is over a minute old." />
+                                        Text="Batteries change slowly. While the mixer is open: every 20 seconds. And right away when a device is plugged in or out (a mouse on its charging cable)." />
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
                                     <Slider x:Name="DevicesPollSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Check every"

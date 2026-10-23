@@ -28,7 +28,7 @@
                         <StackPanel VerticalAlignment="Center" Orientation="Horizontal" Spacing="6">
                             <FontIcon FontSize="14" Glyph="{x:Bind Glyph}" />
                             <TextBlock Margin="0,0,0,1" VerticalAlignment="Center" Foreground="{x:Bind LevelBrush}" Text="{x:Bind LevelText}" />
-                            <FontIcon Margin="-3,0,0,0" FontSize="11" Glyph="&#xE945;" Visibility="{x:Bind ChargingVisibility}" />
+                            <FontIcon Margin="-3,0,0,0" FontSize="11" Foreground="{x:Bind LevelBrush}" Glyph="&#xE945;" Visibility="{x:Bind ChargingVisibility}" />
                         </StackPanel>
                     </Border>
                 </DataTemplate>

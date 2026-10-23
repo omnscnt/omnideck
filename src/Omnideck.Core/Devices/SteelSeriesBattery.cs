@@ -44,7 +44,8 @@ public sealed class SteelSeriesBattery : IBatterySource
             if (model == null) continue;
             if (Query(path, model) is { } battery) result.Add(battery);
         }
-        return result;
+        // On its charging cable a mouse can answer both there and through its receiver: one entry, the cable's.
+        return result.GroupBy(b => b.Name).Select(g => g.OrderByDescending(b => b.IsCharging).First()).ToList();
     }
 
     private static DeviceBattery? Query(string path, Model model)

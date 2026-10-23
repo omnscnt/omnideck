@@ -112,9 +112,9 @@ public partial class App : Application
         _batteries = new BatteryMonitor();
         _batteries.Changed += devices =>
         {
-            _lowBattery.Check(devices, _settings.Devices);
+            _lowBattery.Check(Shown(devices), _settings.Devices);
             BatteriesChanged?.Invoke(devices);
-            dispatcher.TryEnqueue(() => _flyout?.ViewModel.SetBatteries(devices, _settings.Devices.Enabled && _settings.Devices.ShowInMixer, _settings.Devices.LowThreshold));
+            dispatcher.TryEnqueue(() => ShowBatteries(devices));
         };
         ApplyDevices();
 
@@ -282,16 +282,27 @@ public partial class App : Application
             _batteries.Start(TimeSpan.FromMinutes(Math.Clamp(settings.PollMinutes, DeviceSettings.MinPoll, DeviceSettings.MaxPoll)));
         else
             _batteries.Stop();
-        _flyout?.ViewModel.SetBatteries(_batteries.Devices, settings.Enabled && settings.ShowInMixer, settings.LowThreshold);
+        ShowBatteries(_batteries.Devices);
     }
 
-    /// <summary>Reads the batteries again now (the mixer opening, the settings page's Refresh), unless just read.</summary>
-    public void RefreshBatteries(bool force = false)
+    /// <summary>The devices the user didn't hide: what the plaque shows and the low battery notice watches.</summary>
+    private List<DeviceBattery> Shown(IReadOnlyList<DeviceBattery> devices) =>
+        devices.Where(d => !_settings.Devices.HiddenDevices.Contains(d.Name)).ToList();
+
+    private void ShowBatteries(IReadOnlyList<DeviceBattery> devices)
     {
-        if (_batteries == null || !_settings.Devices.Enabled) return;
-        if (force) _ = _batteries.RefreshAsync();
-        else _batteries.RefreshIfOlderThan(TimeSpan.FromMinutes(1));
+        var settings = _settings.Devices;
+        _flyout?.ViewModel.SetBatteries(Shown(devices), settings.Enabled && settings.ShowInMixer, settings.LowThreshold);
     }
+
+    /// <summary>Reads the batteries again now (the settings page's Refresh).</summary>
+    public void RefreshBatteries()
+    {
+        if (_batteries != null && _settings.Devices.Enabled) _ = _batteries.RefreshAsync();
+    }
+
+    /// <summary>While the mixer is open its plaque is on screen: read more often then.</summary>
+    public void SetMixerOpen(bool open) => _batteries?.SetFast(open);
 
     // ---- updates ----------------------------------------------------------------------------------
 

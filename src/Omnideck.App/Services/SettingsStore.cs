@@ -152,5 +152,13 @@ public sealed class DeviceSettings
 
     public const int MinThreshold = 5, MaxThreshold = 50, MinPoll = 1, MaxPoll = 30;
 
-    public DeviceSettings Clone() => (DeviceSettings)MemberwiseClone();
+    /// <summary>Devices left off the plaque and out of the low battery notice, by name.</summary>
+    public List<string> HiddenDevices { get; set; } = [];
+
+    public DeviceSettings Clone()
+    {
+        var copy = (DeviceSettings)MemberwiseClone();
+        copy.HiddenDevices = [.. HiddenDevices];
+        return copy;
+    }
 }
