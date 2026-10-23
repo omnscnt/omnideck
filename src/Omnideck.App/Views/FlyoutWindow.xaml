@@ -274,5 +274,15 @@
                 </Button>
             </Grid>
         </Grid>
+
+        <!-- While the window is clipped to a region (widening), Windows' own border stays around the whole
+             window: it is turned off then, and this one outlines the part in view. -->
+        <Border
+            x:Name="ClipEdge"
+            BorderBrush="{ThemeResource SurfaceStrokeColorFlyoutBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            IsHitTestVisible="False"
+            Visibility="Collapsed" />
     </Grid>
 </Window>

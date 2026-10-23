@@ -289,6 +289,8 @@ public sealed partial class FlyoutWindow : Window
     {
         if (_clipped) return;
         _clipped = true;
+        SetSystemBorder(false);
+        ClipEdge.Visibility = Visibility.Visible;
         RootGrid.HorizontalAlignment = HorizontalAlignment.Right;
         RootGrid.Width = ViewModel.WindowWidth;
         UpdateBounds(); // widening from narrow: the one move of the left edge, with the region already on
@@ -300,18 +302,38 @@ public sealed partial class FlyoutWindow : Window
         if (!_clipped) return;
         _clipped = false;
         SetWindowRgn(_hwnd, IntPtr.Zero, true);
+        SetSystemBorder(true);
+        ClipEdge.Visibility = Visibility.Collapsed;
         RootGrid.ClearValue(FrameworkElement.WidthProperty);
         RootGrid.HorizontalAlignment = HorizontalAlignment.Stretch;
         if (_isOpen) UpdateBounds();
     }
 
     /// <summary>The region: the right part of the window, as wide as the mixer is now, with rounded corners.</summary>
-    private void ClipTo(int width, int height, double scale, int nonClient)
+    private void ClipTo(double scale)
     {
-        int visible = Math.Min(width, (int)Math.Round(ViewModel.WindowWidth * scale) + nonClient);
+        // Window coordinates of the client area: the frame keeps a few non-client pixels, which must stay out.
+        if (!GetWindowRect(_hwnd, out var window) || !GetClientRect(_hwnd, out var client)) return;
+        var origin = new POINT();
+        ClientToScreen(_hwnd, ref origin);
+        int left = origin.X - window.Left, top = origin.Y - window.Top;
+        int visible = Math.Min(client.Right, (int)Math.Round(ViewModel.WindowWidth * scale));
         int corner = (int)Math.Round(16 * scale); // the ellipse's size: an 8 DIP radius, like the system's
-        var region = CreateRoundRectRgn(width - visible, 0, width + 1, height + 1, corner, corner);
+        var region = CreateRoundRectRgn(left + client.Right - visible, top, left + client.Right + 1, top + client.Bottom + 1, corner, corner);
         SetWindowRgn(_hwnd, region, true); // the window owns the region from here
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct POINT { public int X, Y; }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr hwnd, ref POINT point);
+
+    /// <summary>Windows 11's thin window border: drawn around the whole window, region or not.</summary>
+    private void SetSystemBorder(bool on)
+    {
+        int color = on ? unchecked((int)0xFFFFFFFF) /* DWMWA_COLOR_DEFAULT */ : unchecked((int)0xFFFFFFFE) /* DWMWA_COLOR_NONE */;
+        DwmSetWindowAttribute(_hwnd, 34 /* DWMWA_BORDER_COLOR */, ref color, sizeof(int));
     }
 
     [System.Runtime.InteropServices.DllImport("gdi32.dll")] private static extern IntPtr CreateRoundRectRgn(int x1, int y1, int x2, int y2, int w, int h);
@@ -448,7 +470,7 @@ public sealed partial class FlyoutWindow : Window
         // Mid-slide the frame callback owns the position; only take the new size.
         if (_sliding) AppWindow.Resize(new SizeInt32(width, height));
         else AppWindow.MoveAndResize(_target);
-        if (_clipped) ClipTo(width, height, scale, frame.Width - client.Width);
+        if (_clipped) ClipTo(scale);
     }
 
     // ---- events ------------------------------------------------------------------------------
