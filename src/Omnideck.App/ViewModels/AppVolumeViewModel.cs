@@ -29,22 +29,42 @@ public sealed partial class AppVolumeViewModel : VolumeViewModelBase, IDisposabl
     [NotifyPropertyChangedFor(nameof(OutputLabel), nameof(OutputToolTip))]
     private string _defaultOutputName = "Default output";
 
-    /// <summary>The mixer is wide: the output button shows the device's name, not just an icon.</summary>
+    /// <summary>0 narrow (an icon) to 1 wide (the device's name), animated: the button grows and the two cross-fade.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(OutputIconVisibility), nameof(OutputNameVisibility), nameof(OutputButtonWidth))]
-    private bool _isExpanded;
+    [NotifyPropertyChangedFor(nameof(OutputButtonWidth), nameof(OutputIconOpacity), nameof(OutputNameOpacity))]
+    private double _expandProgress;
 
-    public string OutputLabel => MixerLayout.ShortName(RoutedTo ?? DefaultOutputName);
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OutputButtonWidth))]
+    private double _expandedOutputWidth = MixerLayout.DefaultExpandedOutputWidth;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OutputLabel))]
+    private bool _fullNames;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OutputColumnVisibility), nameof(RowPadding))]
+    private bool _outputsEnabled = true;
+
+    public string OutputLabel => FullNames ? RoutedTo ?? DefaultOutputName : MixerLayout.ShortName(RoutedTo ?? DefaultOutputName);
 
     public string OutputToolTip => RoutedTo != null ? $"Plays on {RoutedTo}" : $"Plays on the default output ({DefaultOutputName})";
 
     /// <summary>Its own device stands out; following the default stays quiet.</summary>
     public double OutputOpacity => RoutedTo != null ? 1 : 0.55;
 
+    public Visibility OutputColumnVisibility => OutputsEnabled ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>System sounds can't be sent elsewhere: their spot stays empty, so the sliders still line up.</summary>
     public Visibility OutputButtonVisibility => App.IsSystemSounds ? Visibility.Collapsed : Visibility.Visible;
-    public Visibility OutputIconVisibility => IsExpanded ? Visibility.Collapsed : Visibility.Visible;
-    public Visibility OutputNameVisibility => IsExpanded ? Visibility.Visible : Visibility.Collapsed;
-    public double OutputButtonWidth => IsExpanded ? MixerLayout.ExpandedOutputWidth : MixerLayout.IconOutputWidth;
+
+    public double OutputButtonWidth => MixerLayout.IconOutputWidth + (ExpandedOutputWidth - MixerLayout.IconOutputWidth) * ExpandProgress;
+    public double OutputIconOpacity => Math.Clamp(1 - ExpandProgress * 2, 0, 1);
+    public double OutputNameOpacity => Math.Clamp(ExpandProgress * 2 - 1, 0, 1);
+
+    /// <summary>The output button sits as far from the card's right edge as from its top; a percentage needs more room.</summary>
+    public Thickness RowPadding => new(10, 4, OutputsEnabled ? 4 : 12, 4);
+
 
     public string FallbackGlyph => App.IsSystemSounds ? "" : "";
 

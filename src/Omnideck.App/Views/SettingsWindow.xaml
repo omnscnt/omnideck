@@ -1008,6 +1008,74 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Output device per app" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="A button after each app's volume in the mixer sends it to a device of its own. Windows remembers the choice for the app." />
+                                </StackPanel>
+                                <ToggleSwitch
+                                    x:Name="AppOutputsSwitch"
+                                    MinWidth="0"
+                                    Grid.Column="1" HorizontalAlignment="Right"
+                                    AutomationProperties.Name="Output device per app"
+                                    Toggled="OnMixerLayoutChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="OutputWidthCard" Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Device names in the wide mixer" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="How wide the output buttons get when the mixer is widened; the mixer grows with them." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                                    <Slider x:Name="OutputWidthSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Device name width"
+                                        Maximum="280" Minimum="80" StepFrequency="8" ValueChanged="OnOutputWidthChanged" />
+                                    <TextBlock x:Name="OutputWidthText" Width="36" VerticalAlignment="Center" TextAlignment="Right" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="FullNamesCard" Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Full device names" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="With the adapter, as Windows names them: &quot;Headphones (CS43131 HIFI Audio)&quot; rather than &quot;Headphones&quot;." />
+                                </StackPanel>
+                                <ToggleSwitch
+                                    x:Name="FullNamesSwitch"
+                                    MinWidth="0"
+                                    Grid.Column="1" HorizontalAlignment="Right"
+                                    AutomationProperties.Name="Full device names"
+                                    Toggled="OnMixerLayoutChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Updates" />
                                     <TextBlock
                                         x:Name="UpdateStatusText"

@@ -91,6 +91,7 @@ public partial class App : Application
             _settings.MixerExpanded = expanded;
             SettingsStore.Save(_settings);
         }));
+        ApplyMixerLayout();
         _tray = new TrayIconHost(() => _flyout.Toggle(), ShowSettings, Shutdown);
 
         _nowPlaying = new NowPlayingWatcher(media);
@@ -213,6 +214,35 @@ public partial class App : Application
             if (_flyout != null) foreach (var app in _flyout.ViewModel.Apps) app.Resync();
         }
     }
+
+    // ---- mixer --------------------------------------------------------------------------------------
+
+    public bool AppOutputs
+    {
+        get => _settings.AppOutputs;
+        set { _settings.AppOutputs = value; SaveMixerLayout(); }
+    }
+
+    public int ExpandedOutputWidth
+    {
+        get => _settings.ExpandedOutputWidth;
+        set { _settings.ExpandedOutputWidth = value; SaveMixerLayout(); }
+    }
+
+    public bool FullDeviceNames
+    {
+        get => _settings.FullDeviceNames;
+        set { _settings.FullDeviceNames = value; SaveMixerLayout(); }
+    }
+
+    private void SaveMixerLayout()
+    {
+        SettingsStore.Save(_settings);
+        ApplyMixerLayout();
+    }
+
+    private void ApplyMixerLayout() =>
+        _flyout?.ViewModel.Configure(_settings.AppOutputs && MixerViewModel.CanRouteApps, _settings.ExpandedOutputWidth, _settings.FullDeviceNames);
 
     // ---- updates ----------------------------------------------------------------------------------
 

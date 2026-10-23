@@ -44,6 +44,7 @@ public sealed partial class SettingsWindow : Window
         Nav.Loaded += (_, _) => FloatPane();
         AutoStartSwitch.IsOn = AutoStart.IsEnabled;
         LogVolumeSwitch.IsOn = App.Instance.LogarithmicVolume;
+        LoadMixerSettings();
         LoadWidgetSettings();
         SetupOsdTiles();
         LoadOsdSettings();
@@ -757,6 +758,42 @@ public sealed partial class SettingsWindow : Window
     private void OnLogVolumeToggled(object sender, RoutedEventArgs e)
     {
         if (LogVolumeSwitch.IsOn != App.Instance.LogarithmicVolume) App.Instance.LogarithmicVolume = LogVolumeSwitch.IsOn;
+    }
+
+    // ---- mixer: output device per app ---------------------------------------------------------------
+
+    private bool _loadingMixer = true; // until LoadMixerSettings: the slider fires ValueChanged while XAML is still being built
+
+    private void LoadMixerSettings()
+    {
+        _loadingMixer = true;
+        AppOutputsSwitch.IsOn = App.Instance.AppOutputs;
+        AppOutputsSwitch.IsEnabled = Omnideck.ViewModels.MixerViewModel.CanRouteApps;
+        OutputWidthSlider.Value = App.Instance.ExpandedOutputWidth;
+        FullNamesSwitch.IsOn = App.Instance.FullDeviceNames;
+        ShowMixerSettings();
+        _loadingMixer = false;
+    }
+
+    private void ShowMixerSettings()
+    {
+        OutputWidthText.Text = ((int)OutputWidthSlider.Value).ToString();
+        // Width and names only matter with the buttons on.
+        OutputWidthCard.Opacity = FullNamesCard.Opacity = AppOutputsSwitch.IsOn ? 1 : 0.5;
+        OutputWidthSlider.IsEnabled = FullNamesSwitch.IsEnabled = AppOutputsSwitch.IsOn;
+    }
+
+    private void OnMixerLayoutChanged(object sender, RoutedEventArgs e) => ApplyMixerSettings();
+
+    private void OnOutputWidthChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e) => ApplyMixerSettings();
+
+    private void ApplyMixerSettings()
+    {
+        if (_loadingMixer) return;
+        ShowMixerSettings();
+        if (App.Instance.AppOutputs != AppOutputsSwitch.IsOn) App.Instance.AppOutputs = AppOutputsSwitch.IsOn;
+        if (App.Instance.ExpandedOutputWidth != (int)OutputWidthSlider.Value) App.Instance.ExpandedOutputWidth = (int)OutputWidthSlider.Value;
+        if (App.Instance.FullDeviceNames != FullNamesSwitch.IsOn) App.Instance.FullDeviceNames = FullNamesSwitch.IsOn;
     }
 
     private async void OnWindowsSoundClick(object sender, RoutedEventArgs e) =>

@@ -20,6 +20,15 @@ public sealed class AppSettings
     /// <summary>The mixer shows each app's output device by name (wider), rather than as an icon.</summary>
     public bool MixerExpanded { get; set; }
 
+    /// <summary>Each app in the mixer gets an output device button (Windows' per-app output).</summary>
+    public bool AppOutputs { get; set; } = true;
+
+    /// <summary>How wide the output buttons get in the wide mixer, in DIPs.</summary>
+    public int ExpandedOutputWidth { get; set; } = 128;
+
+    /// <summary>Device names with the adapter in brackets ("Headphones (CS43131 HIFI Audio)"), not just "Headphones".</summary>
+    public bool FullDeviceNames { get; set; }
+
     public UpdateSettings Updates { get; set; } = new();
 }
 

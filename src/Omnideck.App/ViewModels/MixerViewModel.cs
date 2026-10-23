@@ -25,34 +25,103 @@ public sealed partial class MixerViewModel : ObservableObject
 
     public Visibility EmptyVisibility => Apps.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
+    // ---- layout: output buttons and the wide mixer -------------------------------------------------
+
     /// <summary>Wide mixer: each app's output device by name, not just an icon. Remembered.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ExpandGlyph), nameof(ExpandToolTip), nameof(OutputColumnWidth))]
+    [NotifyPropertyChangedFor(nameof(ExpandGlyph), nameof(ExpandToolTip))]
     private bool _isExpanded;
 
-    /// <summary>The master row keeps a gap as wide as the apps' output buttons, so all sliders line up.</summary>
-    public GridLength OutputColumnWidth => new(IsExpanded ? MixerLayout.ExpandedOutputWidth : MixerLayout.IconOutputWidth);
+    /// <summary>0 narrow, 1 wide; animated between them, and everything that changes width follows it.</summary>
+    [ObservableProperty]
+    private double _expandProgress;
+
+    /// <summary>Apps get output buttons (a setting; off also when Windows doesn't support it).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OutputsVisibility), nameof(MasterPadding))]
+    private bool _outputsEnabled = true;
+
+    private double _expandedOutputWidth = MixerLayout.DefaultExpandedOutputWidth;
+    private bool _fullNames;
+
+    public Visibility OutputsVisibility => OutputsEnabled ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>The master row reaches as far right as the rows below: their output buttons, or their percentages.</summary>
+    public Thickness MasterPadding => new(19, 10, OutputsEnabled ? 13 : 21, 8);
 
     public string ExpandGlyph => IsExpanded ? "" : "";
 
     public string ExpandToolTip => IsExpanded ? "Narrow mixer" : "Show each app's output device";
 
-    private readonly Action<bool> _saveExpanded;
+    /// <summary>The window's width now (mid-animation too).</summary>
+    public double WindowWidth => OutputsEnabled
+        ? MixerLayout.NarrowWidth + (_expandedOutputWidth - MixerLayout.IconOutputWidth) * ExpandProgress
+        : MixerLayout.NarrowWidth;
 
-    partial void OnIsExpandedChanged(bool value)
-    {
-        foreach (var app in Apps) app.IsExpanded = value;
-        _saveExpanded(value);
-    }
+    private readonly Action<bool> _saveExpanded;
+    private DispatcherQueueTimer? _expandTimer;
+    private double _expandFrom, _expandStart;
+    private const double ExpandSeconds = 0.22;
 
     [RelayCommand]
     private void ToggleExpanded() => IsExpanded = !IsExpanded;
+
+    partial void OnIsExpandedChanged(bool value)
+    {
+        _saveExpanded(value);
+        // Ease the width over: window, output buttons and their contents together.
+        _expandFrom = ExpandProgress;
+        _expandStart = Now;
+        if (_expandTimer == null)
+        {
+            _expandTimer = _dispatcher.CreateTimer();
+            _expandTimer.Interval = TimeSpan.FromMilliseconds(15);
+            _expandTimer.Tick += (_, _) => StepExpand();
+        }
+        _expandTimer.Start();
+    }
+
+    private static double Now => System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
+
+    private void StepExpand()
+    {
+        double t = Math.Clamp((Now - _expandStart) / ExpandSeconds, 0, 1);
+        double eased = 1 - Math.Pow(1 - t, 3);
+        double target = IsExpanded ? 1 : 0;
+        ExpandProgress = _expandFrom + (target - _expandFrom) * eased;
+        if (t >= 1) _expandTimer!.Stop();
+    }
+
+    partial void OnExpandProgressChanged(double value)
+    {
+        foreach (var app in Apps) app.ExpandProgress = value;
+        OnPropertyChanged(nameof(WindowWidth));
+    }
+
+    /// <summary>From the settings: output buttons on or off, their width when wide, short or full device names.</summary>
+    public void Configure(bool outputsEnabled, double expandedOutputWidth, bool fullNames)
+    {
+        _expandedOutputWidth = Math.Clamp(expandedOutputWidth, MixerLayout.MinExpandedOutputWidth, MixerLayout.MaxExpandedOutputWidth);
+        _fullNames = fullNames;
+        OutputsEnabled = outputsEnabled;
+        foreach (var app in Apps) SyncLayout(app);
+        OnPropertyChanged(nameof(WindowWidth));
+    }
+
+    private void SyncLayout(AppVolumeViewModel app)
+    {
+        app.ExpandedOutputWidth = _expandedOutputWidth;
+        app.FullNames = _fullNames;
+        app.OutputsEnabled = OutputsEnabled;
+        app.ExpandProgress = ExpandProgress;
+    }
 
     public MixerViewModel(AudioService audio, DispatcherQueue dispatcher, bool expanded, Action<bool> saveExpanded)
     {
         _audio = audio;
         _dispatcher = dispatcher;
         _isExpanded = expanded;
+        _expandProgress = expanded ? 1 : 0;
         _saveExpanded = saveExpanded;
         Apps.CollectionChanged += (_, _) => OnPropertyChanged(nameof(EmptyVisibility));
 
@@ -153,7 +222,8 @@ public sealed partial class MixerViewModel : ObservableObject
     private void Add(AudioApp app)
     {
         if (Apps.Any(vm => vm.App == app)) return;
-        var vm = new AppVolumeViewModel(app, _dispatcher) { IsExpanded = IsExpanded };
+        var vm = new AppVolumeViewModel(app, _dispatcher);
+        SyncLayout(vm);
 
         // Apps in order of appearance; system sounds always last, like the Windows mixer.
         int index = app.IsSystemSounds
@@ -175,10 +245,9 @@ public sealed partial class MixerViewModel : ObservableObject
 /// <summary>Widths shared by the mixer window and its rows, in DIPs.</summary>
 public static class MixerLayout
 {
-    public const double NarrowWidth = 360, IconOutputWidth = 28, ExpandedOutputWidth = 128;
+    public const double NarrowWidth = 360, IconOutputWidth = 28;
+    public const double DefaultExpandedOutputWidth = 128, MinExpandedOutputWidth = 80, MaxExpandedOutputWidth = 280;
 
-    /// <summary>Wide, the window grows by exactly what the output buttons gain: the sliders keep their length.</summary>
-    public static double Width(bool expanded) => expanded ? NarrowWidth + ExpandedOutputWidth - IconOutputWidth : NarrowWidth;
 
     /// <summary>A device's name without the adapter Windows adds in brackets: "Headphones (CS43131 HIFI Audio)" → "Headphones".</summary>
     public static string ShortName(string name)

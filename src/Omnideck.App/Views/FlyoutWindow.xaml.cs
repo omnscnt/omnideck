@@ -20,7 +20,7 @@ namespace Omnideck.Views;
 /// <summary>Borderless acrylic flyout that pops up next to the tray, Windows 11 quick-settings style.</summary>
 public sealed partial class FlyoutWindow : Window
 {
-    private double WidthDip => MixerLayout.Width(ViewModel.IsExpanded);
+    private double WidthDip => ViewModel.WindowWidth;
     private const double MarginDip = 12;
     private const double MaxAppsHeightDip = 540;
 
