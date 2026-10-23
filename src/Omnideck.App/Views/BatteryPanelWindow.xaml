@@ -8,7 +8,8 @@
 
     <!-- A separate plaque over the mixer, like the media flyout over Windows 11's quick settings:
          a chip per wireless device with its charge. Placed, shown and slid by the mixer's window. -->
-    <Grid x:Name="RootGrid" Padding="8,10">
+    <!-- One more DIP on top: the visible top edge sits on the client area, the bottom one inside it. -->
+    <Grid x:Name="RootGrid" Padding="8,11,8,10">
         <ItemsControl x:Name="ChipsList" HorizontalAlignment="Left" VerticalAlignment="Center">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>

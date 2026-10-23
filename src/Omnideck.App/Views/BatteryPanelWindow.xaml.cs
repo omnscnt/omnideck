@@ -16,7 +16,7 @@ namespace Omnideck.Views;
 public sealed partial class BatteryPanelWindow : Window
 {
     /// <summary>Height in DIPs: a chip (28) and its padding.</summary>
-    public const double HeightDip = 48;
+    public const double HeightDip = 49;
 
     private readonly IntPtr _hwnd;
     private DesktopAcrylicController? _acrylic;
