@@ -622,8 +622,14 @@ public sealed class TaskbarWidget : IDisposable
         return true;
     }
 
+    /// <summary>The app ("spotify") whose track is on the taskbar right now; null while the widget is hidden. Any thread.</summary>
+    public string? VisibleAppName => _visibleApp;
+
+    private volatile string? _visibleApp;
+
     private void SetVisible(bool visible)
     {
+        _visibleApp = visible ? _shown?.AppName : null;
         if (visible == _visible) return;
         _visible = visible;
         ShowWindow(_hwnd, visible ? 4 /* SW_SHOWNOACTIVATE */ : 0 /* SW_HIDE */);

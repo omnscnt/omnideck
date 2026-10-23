@@ -226,7 +226,7 @@ public sealed class NowPlayingWatcher : IDisposable
             controls?.IsNextEnabled ?? true);
     }
 
-    private static async Task<byte[]> ReadAllAsync(IRandomAccessStreamReference reference)
+    internal static async Task<byte[]> ReadAllAsync(IRandomAccessStreamReference reference)
     {
         using var stream = await reference.OpenReadAsync();
         var buffer = new byte[stream.Size];

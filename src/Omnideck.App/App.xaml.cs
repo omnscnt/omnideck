@@ -97,7 +97,7 @@ public partial class App : Application
 
         _osd = new VolumeOsd();
         _osd.Configure(_settings.VolumeOsd);
-        _osdFeed = new VolumeOsdFeed(_audio, _runner, _osd, () => _settings.VolumeOsd);
+        _osdFeed = new VolumeOsdFeed(_audio, _runner, _osd, () => _settings.VolumeOsd, media, () => _widget?.VisibleAppName);
         _notices = new OsdNoticeFeed(_audio, _hotkeys, _osd, () => _settings.VolumeOsd);
 
         new Thread(() =>

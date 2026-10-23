@@ -33,6 +33,8 @@ public sealed class VolumeOsd : IDisposable
     private OsdContent? _content;
     private Phase _phase = Phase.Hidden;
     private double _opacity, _level, _holdUntil, _lastTick;
+    private double _mediaDrawn; // a media card's progress bar moves: redrawn every MediaFrame while it holds
+    private const double MediaFrame = 0.5;
     private int _x, _y; // top-left of the window at rest, physical px
     private double _scale = 1;
     private OsdLayout _layout = new VolumeOsdSettings().ToLayout();
@@ -134,6 +136,8 @@ public sealed class VolumeOsd : IDisposable
             Place();
             _level = content.Volume;
         }
+        else if (_phase != Phase.Hidden && (previous?.Media == null) != (content.Media == null))
+            Place(); // the media card came or went: the window's height changes
         if (_phase == Phase.Hidden)
         {
             _layout = Settings.ToLayout(); // the size is taken when it appears
@@ -203,7 +207,7 @@ public sealed class VolumeOsd : IDisposable
                 break;
             case Phase.Holding:
                 if (now >= _holdUntil) _phase = Phase.Hiding;
-                else if (!levelMoving) return; // nothing changes on screen while it just sits there
+                else if (!levelMoving && !(_content.Media != null && now - _mediaDrawn >= MediaFrame)) return; // nothing changes on screen while it just sits there
                 break;
             case Phase.Hiding:
                 _opacity = Math.Max(0, _opacity - dt / FadeOut);
@@ -220,6 +224,7 @@ public sealed class VolumeOsd : IDisposable
         float eased = (float)(1 - Math.Pow(1 - _opacity, 3));
         int slide = (int)Math.Round((1 - eased) * SlideDip * _scale) * (_fromBottom ? 1 : -1);
         var pixels = _view.Render(_content, _layout, (float)_level, eased, _light, _scale, out int w, out int h);
+        _mediaDrawn = Now;
         Present(pixels, w, h, _x, _y + slide);
     }
 

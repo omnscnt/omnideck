@@ -538,7 +538,7 @@ public sealed partial class SettingsWindow : Window
     private VolumeOsdSettings _osd = new();
     private bool _loadingOsd = true; // until LoadOsdSettings: the slider fires ValueChanged while XAML is still being built
 
-    private OsdKindTile _osdVolume = null!, _osdMic = null!, _osdCaps = null!, _osdNum = null!, _osdScroll = null!, _osdLayout = null!, _osdDevice = null!;
+    private OsdKindTile _osdVolume = null!, _osdMic = null!, _osdCaps = null!, _osdNum = null!, _osdScroll = null!, _osdLayout = null!, _osdDevice = null!, _osdMedia = null!;
 
     /// <summary>The tiles that pick which notices show; each change applies (and saves) at once.</summary>
     private void SetupOsdTiles()
@@ -550,7 +550,8 @@ public sealed partial class SettingsWindow : Window
         _osdScroll = new("Scroll Lock", "Turning on or off", null, "↕", ApplyOsd);
         _osdLayout = new("Keyboard layout", "Switching the language", "", null, ApplyOsd);
         _osdDevice = new("Output device", "Switching the output", "", null, ApplyOsd);
-        OsdKindTiles.ItemsSource = new[] { _osdVolume, _osdMic, _osdCaps, _osdNum, _osdScroll, _osdLayout, _osdDevice };
+        _osdMedia = new("Now playing", "Track with app volume", "", null, ApplyOsd);
+        OsdKindTiles.ItemsSource = new[] { _osdVolume, _osdMedia, _osdMic, _osdCaps, _osdNum, _osdScroll, _osdLayout, _osdDevice };
     }
 
     // ---- lock key light: a #RRGGBB field and a swatch that opens a colour picker ----------------------
@@ -638,7 +639,9 @@ public sealed partial class SettingsWindow : Window
         bool light = (Content as FrameworkElement)?.ActualTheme == ElementTheme.Light;
         double scale = (Content as FrameworkElement)?.XamlRoot?.RasterizationScale ?? 1.0;
         var master = App.Audio.Master;
-        ShowPreview(OsdPreviewVolume, new OsdContent("master", null, 0, master?.Volume ?? 0.5f, master?.IsMuted ?? false), layout, light, scale);
+        // The volume with the media card over (or under) it, when that is on: a sample track, no cover.
+        var media = _osd.ShowNowPlaying ? new OsdMedia("Track title", "Artist", null, 0, TimeSpan.FromSeconds(78), TimeSpan.FromSeconds(214), OsdMedia.Now) : null;
+        ShowPreview(OsdPreviewVolume, new OsdContent("master", null, 0, master?.Volume ?? 0.5f, master?.IsMuted ?? false, Media: media), layout, light, scale);
         ShowPreview(OsdPreviewLock, OsdContent.KeyNotice("lock", "A", true, "Caps Lock on", units: 1.75f), layout, light, scale);
         ShowPreview(OsdPreviewLayout, OsdContent.KeyNotice("layout", "EN", null, "English (United States)"), layout, light, scale);
     }
@@ -666,6 +669,7 @@ public sealed partial class SettingsWindow : Window
         _osdScroll.Load(_osd.ShowScrollLock);
         _osdLayout.Load(_osd.ShowKeyboardLayout);
         _osdDevice.Load(_osd.ShowOutputDevice);
+        _osdMedia.Load(_osd.ShowNowPlaying);
         UpdateOsdPicker();
         OsdDurationSlider.Value = _osd.DurationMs / 1000.0;
         OsdExternalSwitch.IsOn = _osd.ShowExternalChanges;
@@ -697,6 +701,7 @@ public sealed partial class SettingsWindow : Window
         _osd.ShowScrollLock = _osdScroll.IsOn;
         _osd.ShowKeyboardLayout = _osdLayout.IsOn;
         _osd.ShowOutputDevice = _osdDevice.IsOn;
+        _osd.ShowNowPlaying = _osdMedia.IsOn;
         _osd.DurationMs = (int)Math.Round(OsdDurationSlider.Value * 1000);
         _osd.ShowExternalChanges = OsdExternalSwitch.IsOn;
         _osd.Width = (int)Math.Round(OsdWidthSlider.Value);

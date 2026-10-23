@@ -608,8 +608,7 @@
                             <StackPanel x:Name="OsdPreviewPanel" Margin="0,-6" HorizontalAlignment="Center" Spacing="-28">
                                 <Image x:Name="OsdPreviewVolume" Stretch="None" />
                                 <Image x:Name="OsdPreviewLock" Stretch="None" />
-                                <Image x:Name="OsdPreviewLayout" Stretch="None" />
-                            </StackPanel>
+                                <Image x:Name="OsdPreviewLayout" Stretch="None" />                            </StackPanel>
                         </Border>
 
                         <Border Style="{StaticResource SettingsCardStyle}">

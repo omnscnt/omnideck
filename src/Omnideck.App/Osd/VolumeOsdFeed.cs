@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Omnideck.Core;
 using Omnideck.Core.Hotkeys;
+using Omnideck.Core.Media;
 using Omnideck.Services;
 using Omnideck.ViewModels;
 
@@ -23,13 +24,23 @@ public sealed class VolumeOsdFeed
     private readonly ConcurrentDictionary<string, byte[]?> _icons = new(StringComparer.OrdinalIgnoreCase);
     private MasterVolume? _watchedMaster;
 
-    public VolumeOsdFeed(AudioService audio, HotkeyActionRunner runner, VolumeOsd osd, Func<VolumeOsdSettings> settings)
+    // What apps are playing, read once and reused for a moment: a held hotkey changes the volume many times a second.
+    private const double TrackFresh = 2, CoverPixels = 96;
+    private readonly MediaSessionService _media;
+    private readonly Func<string?> _widgetApp;
+    private readonly ConcurrentDictionary<string, (double At, Task<OsdMedia?> Read)> _tracks = new();
+    private (string Key, byte[]? Pixels) _cover; // the last cover, decoded, for "AppId|Title"
+
+    /// <param name="widgetApp">The app whose track the taskbar widget shows right now, if any: no card for that one.</param>
+    public VolumeOsdFeed(AudioService audio, HotkeyActionRunner runner, VolumeOsd osd, Func<VolumeOsdSettings> settings, MediaSessionService media, Func<string?> widgetApp)
     {
         _audio = audio;
         _osd = osd;
         _settings = settings;
+        _media = media;
+        _widgetApp = widgetApp;
 
-        runner.VolumeChanged += (_, target) => { if (_settings().Enabled) _osd.Show(ContentFor(target)); };
+        runner.VolumeChanged += (_, target) => { if (_settings().Enabled) Show(target); };
         audio.AppAdded += (_, app) => Watch(app);
         audio.AppRemoved += (_, app) => { lock (_gate) _watchedApps.Remove(app); };
         audio.DeviceChanged += (_, _) => WatchAll(); // a new device brings a new master and new app objects
@@ -68,7 +79,85 @@ public sealed class VolumeOsdFeed
     {
         var settings = _settings();
         if (e.Context == VolumeViewModelBase.UiContext || !settings.Enabled || !settings.ShowExternalChanges) return;
-        _osd.Show(ContentFor(target));
+        Show(target);
+    }
+
+    /// <summary>
+    /// An app's volume comes with a card for what it plays, when it is playing (not paused) and the taskbar
+    /// widget isn't already showing it. The track is read asynchronously, so the first change of a burst
+    /// waits for it (a few milliseconds); the rest reuse it.
+    /// </summary>
+    private void Show(IVolumeControl target)
+    {
+        if (target is not AudioApp app || app.ProcessName.Length == 0 || !_settings().ShowNowPlaying || _widgetApp() == app.ProcessName)
+        {
+            _osd.Show(ContentFor(target));
+            return;
+        }
+        double now = OsdMedia.Now;
+        var entry = _tracks.AddOrUpdate(app.ProcessName,
+            _ => (now, ReadTrackAsync(app.ProcessName)),
+            (_, old) => now - old.At < TrackFresh ? old : (now, ReadTrackAsync(app.ProcessName)));
+        if (entry.Read.IsCompletedSuccessfully) _osd.Show(ContentFor(app) with { Media = entry.Read.Result });
+        else _ = ShowWhenReadAsync(app, entry.Read);
+    }
+
+    private async Task ShowWhenReadAsync(AudioApp app, Task<OsdMedia?> read)
+    {
+        OsdMedia? media = null;
+        try
+        {
+            media = await read.WaitAsync(TimeSpan.FromMilliseconds(400)).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Slow or failing media service: the volume alone.
+        }
+        _osd.Show(ContentFor(app) with { Media = media });
+    }
+
+    private async Task<OsdMedia?> ReadTrackAsync(string processName)
+    {
+        var cached = _cover;
+        // The cover is decoded once per track; the timeline is read every time.
+        var track = await _media.GetPlayingTrackAsync(processName, withCover: false).ConfigureAwait(false);
+        if (track == null) return null;
+        string key = track.AppId + "|" + track.Title;
+        byte[]? pixels = cached.Key == key ? cached.Pixels : null;
+        if (cached.Key != key)
+        {
+            var withCover = await _media.GetPlayingTrackAsync(processName, withCover: true).ConfigureAwait(false);
+            if (withCover?.Cover is { } bytes) pixels = await DecodeCoverAsync(bytes, (int)CoverPixels).ConfigureAwait(false);
+            if (withCover?.Cover != null || withCover == null) _cover = (key, pixels); // a cover that hasn't arrived yet is tried again next time
+        }
+        return new OsdMedia(track.Title, track.Artist, pixels, (int)CoverPixels, track.Position, track.Duration, OsdMedia.Now);
+    }
+
+    /// <summary>The cover scaled to fill a square (cropped in the middle if it isn't one), as premultiplied BGRA.</summary>
+    private static async Task<byte[]?> DecodeCoverAsync(byte[] bytes, int size)
+    {
+        try
+        {
+            using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+            await stream.WriteAsync(System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeBufferExtensions.AsBuffer(bytes));
+            stream.Seek(0);
+            var decoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(stream);
+            double fill = Math.Max(size / (double)decoder.PixelWidth, size / (double)decoder.PixelHeight);
+            uint w = (uint)Math.Max(size, Math.Round(decoder.PixelWidth * fill)), h = (uint)Math.Max(size, Math.Round(decoder.PixelHeight * fill));
+            var transform = new Windows.Graphics.Imaging.BitmapTransform
+            {
+                ScaledWidth = w, ScaledHeight = h, InterpolationMode = Windows.Graphics.Imaging.BitmapInterpolationMode.Fant,
+                Bounds = new Windows.Graphics.Imaging.BitmapBounds { X = (w - (uint)size) / 2, Y = (h - (uint)size) / 2, Width = (uint)size, Height = (uint)size },
+            };
+            var data = await decoder.GetPixelDataAsync(Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8, Windows.Graphics.Imaging.BitmapAlphaMode.Premultiplied,
+                transform, Windows.Graphics.Imaging.ExifOrientationMode.RespectExifOrientation, Windows.Graphics.Imaging.ColorManagementMode.DoNotColorManage);
+            var pixels = data.DetachPixelData();
+            return pixels.Length == size * size * 4 ? pixels : null;
+        }
+        catch (Exception)
+        {
+            return null; // unsupported or broken image: the placeholder
+        }
     }
 
     private OsdContent ContentFor(IVolumeControl target) => target switch

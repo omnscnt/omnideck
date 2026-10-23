@@ -1,6 +1,7 @@
 using System.Numerics;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Effects;
+using Microsoft.Graphics.Canvas.Geometry;
 using Microsoft.Graphics.Canvas.Text;
 using Windows.Foundation;
 using Windows.UI;
@@ -30,9 +31,47 @@ public sealed class VolumeOsdView
     private const float MaxTextBoxWidth = 480;
 
     /// <summary>The window's size for this content: the backing plus room for its shadow.</summary>
-    public Size SizeDip(OsdContent content, OsdLayout layout) => new(
-        Math.Max(1, BoxWidth(content, layout) + 2 * layout.Backing) + 2 * ShadowMargin,
-        Math.Max(1, layout.Height + 2 * layout.Backing) + 2 * ShadowMargin);
+    public Size SizeDip(OsdContent content, OsdLayout layout)
+    {
+        var (pill, card) = Arrange(content, layout);
+        var union = card is Rect c ? Union(pill, c) : pill;
+        return new(union.Width + 2 * ShadowMargin, union.Height + 2 * ShadowMargin);
+    }
+
+    // The media card, for a 48-high pill (it scales with it too).
+    private const float CardGap = 8, CardCover = 48, CardPad = 12, CardMinWidth = 240, CardCorner = 14;
+
+    /// <summary>
+    /// Where the pill's backing and the media card (if any) sit in the window: the card on the side away
+    /// from the screen's edge, both lined up on the side the indicator sits on (or centred).
+    /// </summary>
+    private (Rect Pill, Rect? Card) Arrange(OsdContent content, OsdLayout layout)
+    {
+        float pw = Math.Max(1, BoxWidth(content, layout) + 2 * layout.Backing);
+        float ph = Math.Max(1, layout.Height + 2 * layout.Backing);
+        if (content.Media == null) return (new Rect(ShadowMargin, ShadowMargin, pw, ph), null);
+
+        float k = layout.Height / BaseHeight;
+        float cw = Math.Max(pw, CardMinWidth * k), ch = CardCover * k + 2 * CardPad * k, gap = CardGap * k;
+        float width = Math.Max(pw, cw);
+        var position = layout.Position;
+        float X(float w) => ShadowMargin + position switch
+        {
+            OsdPosition.BottomLeft or OsdPosition.TopLeft => 0,
+            OsdPosition.BottomRight or OsdPosition.TopRight => width - w,
+            _ => (width - w) / 2,
+        };
+        bool cardAbove = position is OsdPosition.BottomCenter or OsdPosition.BottomLeft or OsdPosition.BottomRight;
+        var pill = new Rect(X(pw), ShadowMargin + (cardAbove ? ch + gap : 0), pw, ph);
+        var card = new Rect(X(cw), cardAbove ? ShadowMargin : ShadowMargin + ph + gap, cw, ch);
+        return (pill, card);
+    }
+
+    private static Rect Union(Rect a, Rect b)
+    {
+        double left = Math.Min(a.X, b.X), top = Math.Min(a.Y, b.Y);
+        return new Rect(left, top, Math.Max(a.Right, b.Right) - left, Math.Max(a.Bottom, b.Bottom) - top);
+    }
 
     /// <summary>
     /// The content box's width: the configured width for the volume bar; a text notice is as wide as its
@@ -79,9 +118,12 @@ public sealed class VolumeOsdView
         Color Fore(double alpha) => Color.FromArgb((byte)(alpha * 255), fore.R, fore.G, fore.B);
 
         // The content box holds icon, bar and number; the backing extends past it by Backing on every side.
-        var box = new Rect(ShadowMargin + layout.Backing, ShadowMargin + layout.Backing, BoxWidth(content, layout), layout.Height);
-        var backing = new Rect(ShadowMargin, ShadowMargin, size.Width - 2 * ShadowMargin, size.Height - 2 * ShadowMargin);
+        var (backing, card) = Arrange(content, layout);
+        var box = new Rect(backing.X + layout.Backing, backing.Y + layout.Backing, BoxWidth(content, layout), layout.Height);
         float radius = (float)(Math.Clamp(layout.CornerPercent, 0, 100) / 100 * Math.Min(backing.Width, backing.Height) / 2);
+        float cardRadius = Math.Clamp(layout.CornerPercent, 0, 100) / 100 * CardCorner * k;
+        var backingColor = light ? Color.FromArgb(0xE8, 0xF7, 0xF7, 0xF7) : Color.FromArgb(0xE0, 0x24, 0x24, 0x24);
+        var edgeColor = light ? Color.FromArgb(0x1A, 0, 0, 0) : Color.FromArgb(0x24, 255, 255, 255);
 
         using var format = new CanvasTextFormat
         {
@@ -105,19 +147,30 @@ public sealed class VolumeOsdView
 
             using (ds.CreateLayer(opacity))
             {
-                // Soft shadow: the backing's shape, blurred, a little lower.
+                // Soft shadow: the backings' shapes, blurred, a little lower.
                 using (var shape = new CanvasCommandList(_device))
                 {
                     using (var s = shape.CreateDrawingSession())
+                    {
                         s.FillRoundedRectangle(backing, radius, radius, Color.FromArgb(255, 0, 0, 0));
+                        if (card is Rect c) s.FillRoundedRectangle(c, cardRadius, cardRadius, Color.FromArgb(255, 0, 0, 0));
+                    }
                     var shadow = new ShadowEffect { Source = shape, BlurAmount = 8, ShadowColor = Color.FromArgb(light ? (byte)50 : (byte)110, 0, 0, 0) };
                     ds.DrawImage(shadow, 0, 3);
                 }
 
                 // Semi-transparent backing with a hairline edge.
-                ds.FillRoundedRectangle(backing, radius, radius, light ? Color.FromArgb(0xE8, 0xF7, 0xF7, 0xF7) : Color.FromArgb(0xE0, 0x24, 0x24, 0x24));
+                ds.FillRoundedRectangle(backing, radius, radius, backingColor);
                 float edge = Math.Max(0, radius - 0.5f);
-                ds.DrawRoundedRectangle(Inflate(backing, -0.5f), edge, edge, light ? Color.FromArgb(0x1A, 0, 0, 0) : Color.FromArgb(0x24, 255, 255, 255), 1);
+                ds.DrawRoundedRectangle(Inflate(backing, -0.5f), edge, edge, edgeColor, 1);
+
+                if (card is Rect cardRect && content.Media != null)
+                {
+                    ds.FillRoundedRectangle(cardRect, cardRadius, cardRadius, backingColor);
+                    float cardEdge = Math.Max(0, cardRadius - 0.5f);
+                    ds.DrawRoundedRectangle(Inflate(cardRect, -0.5f), cardEdge, cardEdge, edgeColor, 1);
+                    DrawMedia(ds, content.Media, cardRect, cardRadius, layout, k, light, Fore, scale);
+                }
 
                 // Icon: the app's own, a given glyph, or a speaker that shows the level.
                 // Glyphs are laid out by their ink (the speaker by its widest variant, so the bar doesn't move with the level).
@@ -186,6 +239,83 @@ public sealed class VolumeOsdView
         _icon = content.Icon == null ? null
             : CanvasBitmap.CreateFromBytes(_device, content.Icon, content.IconSize, content.IconSize,
                 Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized, 96, CanvasAlphaMode.Premultiplied);
+    }
+
+    // ---- media card: cover, title, artist, progress ---------------------------------------------------
+
+    private CanvasBitmap? _cover;
+    private byte[]? _coverSource;
+
+    /// <summary>
+    /// The cover on the left (rounded to match the card, or a note on a tint while there is none); title
+    /// and artist at its top, one line each, cut with an ellipsis; the progress bar along its bottom.
+    /// </summary>
+    private void DrawMedia(CanvasDrawingSession ds, OsdMedia media, Rect card, float cardRadius, OsdLayout layout, float k, bool light, Func<double, Color> fore, double scale)
+    {
+        if (!ReferenceEquals(media.Cover, _coverSource))
+        {
+            _coverSource = media.Cover;
+            _cover?.Dispose();
+            _cover = media.Cover == null ? null
+                : CanvasBitmap.CreateFromBytes(_device, media.Cover, media.CoverSize, media.CoverSize,
+                    Windows.Graphics.DirectX.DirectXPixelFormat.B8G8R8A8UIntNormalized, 96, CanvasAlphaMode.Premultiplied);
+        }
+
+        float pad = CardPad * k, size = CardCover * k;
+        var cover = new Rect(card.X + pad, card.Y + pad, size, size);
+        float coverRadius = Math.Max(3 * k, cardRadius - pad) * Math.Clamp(layout.CornerPercent, 0, 100) / 100;
+        if (_cover != null)
+        {
+            using var clip = CanvasGeometry.CreateRoundedRectangle(_device, cover, coverRadius, coverRadius);
+            using (ds.CreateLayer(1, clip))
+                ds.DrawImage(_cover, cover, _cover.Bounds, 1, CanvasImageInterpolation.HighQualityCubic);
+        }
+        else
+        {
+            ds.FillRoundedRectangle(cover, coverRadius, coverRadius, fore(light ? 0.08 : 0.1));
+            DrawGlyph(ds, "", cover, 20 * k, fore(0.55), scale);
+        }
+
+        float textLeft = (float)cover.Right + 12 * k;
+        float textWidth = Math.Max(1, (float)(card.Right - pad) - textLeft);
+        CanvasTextFormat Format(float fontSize, bool bold) => new()
+        {
+            FontFamily = TextFont, FontSize = fontSize, WordWrapping = CanvasWordWrapping.NoWrap,
+            FontWeight = bold ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal,
+            TrimmingGranularity = CanvasTextTrimmingGranularity.Character, TrimmingSign = CanvasTrimmingSign.Ellipsis,
+        };
+        // Lines placed by their capital letters' ink, like the notices' text.
+        Rect Caps(CanvasTextFormat format)
+        {
+            using var probe = new CanvasTextLayout(_device, "H", format, 1000, 1000);
+            return probe.DrawBounds;
+        }
+
+        using var titleFormat = Format(layout.TextSize, bold: true);
+        var titleCaps = Caps(titleFormat);
+        float titleY = Snap((float)(cover.Y + 3 * k - titleCaps.Y), scale);
+        using (var title = new CanvasTextLayout(_device, media.Title, titleFormat, textWidth, 1000))
+            ds.DrawTextLayout(title, Snap(textLeft, scale), titleY, fore(0.95));
+
+        if (media.Artist.Length > 0)
+        {
+            using var artistFormat = Format(Math.Max(9, layout.TextSize - 2), bold: false);
+            var artistCaps = Caps(artistFormat);
+            float artistY = Snap((float)(titleY + titleCaps.Y + titleCaps.Height + 7 * k - artistCaps.Y), scale);
+            using var artist = new CanvasTextLayout(_device, media.Artist, artistFormat, textWidth, 1000);
+            ds.DrawTextLayout(artist, Snap(textLeft, scale), artistY, fore(0.6));
+        }
+
+        if (media.Progress(OsdMedia.Now) is float progress)
+        {
+            float barHeight = Math.Max(3, 4 * k);
+            float barY = (float)cover.Bottom - barHeight - 2 * k;
+            var track = new Rect(textLeft, barY, textWidth, barHeight);
+            ds.FillRoundedRectangle(track, barHeight / 2, barHeight / 2, fore(light ? 0.18 : 0.22));
+            float fill = progress * textWidth;
+            if (fill > 0.5f)
+                ds.FillRoundedRectangle(new Rect(textLeft, barY, Math.Max(fill, barHeight), barHeight), barHeight / 2, barHeight / 2, fore(1));
+        }
     }
 
     // ---- key caps: the icon for lock keys and the keyboard layout -----------------------------------

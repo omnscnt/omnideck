@@ -23,6 +23,9 @@ public sealed class VolumeOsdSettings
     public bool ShowKeyboardLayout { get; set; } = true;
     public bool ShowOutputDevice { get; set; } = true;
 
+    /// <summary>With an app's volume, a card with what it plays (cover, title, progress), unless the taskbar widget already shows it.</summary>
+    public bool ShowNowPlaying { get; set; } = true;
+
     [System.Text.Json.Serialization.JsonIgnore]
     public bool AnyEnabled => Enabled || ShowMicrophone || ShowCapsLock || ShowNumLock || ShowScrollLock || ShowKeyboardLayout || ShowOutputDevice;
 
@@ -52,7 +55,7 @@ public sealed class VolumeOsdSettings
     public OsdLayout ToLayout() => new(
         Math.Clamp(Width, MinWidth, MaxWidth), Math.Clamp(Height, MinHeight, MaxHeight),
         Math.Clamp(Backing, MinBacking, MaxBacking), Math.Clamp(CornerPercent, 0, 100),
-        Math.Clamp(TextSize, MinTextSize, MaxTextSize), ParseColor(LockLightColor) ?? ParseColor(DefaultLockLight)!.Value);
+        Math.Clamp(TextSize, MinTextSize, MaxTextSize), ParseColor(LockLightColor) ?? ParseColor(DefaultLockLight)!.Value, Position);
 
     /// <summary>"#RRGGBB" to a colour; null when it isn't one.</summary>
     public static Windows.UI.Color? ParseColor(string? hex)
@@ -65,7 +68,8 @@ public sealed class VolumeOsdSettings
 }
 
 /// <summary>Sizes of one indicator in DIPs: the content box, the backing's extra margin, the corner rounding, the number.</summary>
-public readonly record struct OsdLayout(float Width, float Height, float Backing, float CornerPercent, float TextSize, Windows.UI.Color LockLight);
+/// <param name="Position">Where it sits: a media card goes on the side away from the screen's edge, aligned with the pill.</param>
+public readonly record struct OsdLayout(float Width, float Height, float Backing, float CornerPercent, float TextSize, Windows.UI.Color LockLight, OsdPosition Position = OsdPosition.BottomCenter);
 
 /// <summary>What one notice shows: a volume bar with its number, or (with <paramref name="Text"/>) a line of text.</summary>
 /// <param name="Key">Identifies the target: a new key restarts the appear animation, the same one just updates.</param>
@@ -75,9 +79,10 @@ public readonly record struct OsdLayout(float Width, float Height, float Backing
 /// <param name="KeyLabel">Draws a key cap with this label as the icon (lock keys, layout), instead of a glyph.</param>
 /// <param name="KeyOn">The key cap's light: on, off, or none (null).</param>
 /// <param name="KeyUnits">The key cap's width in key units (Caps Lock is wider than Num Lock).</param>
+/// <param name="Media">What the app plays, shown as a card next to its volume.</param>
 public sealed record OsdContent(
     string Key, byte[]? Icon, int IconSize, float Volume, bool Muted,
-    string? Glyph = null, string? Text = null, string? KeyLabel = null, bool? KeyOn = null, float KeyUnits = 1)
+    string? Glyph = null, string? Text = null, string? KeyLabel = null, bool? KeyOn = null, float KeyUnits = 1, OsdMedia? Media = null)
 {
     public static OsdContent Message(string key, string glyph, string text, bool dimmed = false) =>
         new(key, null, 0, 0, dimmed, glyph, text);
@@ -85,4 +90,15 @@ public sealed record OsdContent(
     /// <param name="units">The key's width in key units, as on a keyboard (Caps Lock is 1.75, most keys 1).</param>
     public static OsdContent KeyNotice(string key, string label, bool? lit, string text, bool dimmed = false, float units = 1) =>
         new(key, null, 0, 0, dimmed, null, text, label, lit, units);
+}
+
+/// <summary>The media card: a cover (premultiplied BGRA, <paramref name="CoverSize"/> square; null for a placeholder), title, artist, progress.</summary>
+/// <param name="ReadAt">When <paramref name="Position"/> was read (<see cref="Now"/>): the bar runs on from there.</param>
+public sealed record OsdMedia(string Title, string Artist, byte[]? Cover, int CoverSize, TimeSpan Position, TimeSpan Duration, double ReadAt)
+{
+    public static double Now => System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
+
+    /// <summary>How far into the track, 0..1, at <paramref name="now"/>; null when the length is unknown.</summary>
+    public float? Progress(double now) => Duration <= TimeSpan.Zero ? null
+        : (float)Math.Clamp((Position.TotalSeconds + Math.Max(0, now - ReadAt)) / Duration.TotalSeconds, 0, 1);
 }
