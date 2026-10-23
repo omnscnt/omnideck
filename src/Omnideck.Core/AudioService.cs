@@ -13,11 +13,10 @@ public sealed class AudioService : IDisposable
     private readonly object _gate = new();
     private readonly IMMDeviceEnumerator _enumerator;
     private readonly DeviceNotifications _deviceNotifications;
-    private readonly SessionNotifications _sessionNotifications;
     private readonly Dictionary<string, AudioApp> _apps = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<AudioSession, AudioApp> _sessionOwners = [];
     private readonly Timer _reaper;
-    private IAudioSessionManager2? _sessionManager;
+    private readonly List<(IAudioSessionManager2 Manager, SessionNotifications Notifications)> _devices = []; // every active output's sessions
     private MasterVolume? _master;
     private MasterVolume? _microphone;
     private int _micRebuildPending;
@@ -37,7 +36,6 @@ public sealed class AudioService : IDisposable
     {
         _enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
         _deviceNotifications = new DeviceNotifications(this);
-        _sessionNotifications = new SessionNotifications(this);
         _enumerator.RegisterEndpointNotificationCallback(_deviceNotifications);
         AttachToDefaultDevice();
         AttachMicrophone();
@@ -137,6 +135,50 @@ public sealed class AudioService : IDisposable
         }
     }
 
+    // ---- per-app output ----------------------------------------------------------------------
+
+    /// <summary>Whether this Windows lets apps be sent to their own output device.</summary>
+    public static bool CanRouteApps => AudioPolicyConfig.IsAvailable;
+
+    /// <summary>The output device an app is sent to (a device id), or null when it follows the default.</summary>
+    public string? GetAppOutput(AudioApp app)
+    {
+        if (app.IsSystemSounds) return null;
+        try
+        {
+            return app.ProcessIds.Select(AudioPolicyConfig.GetOutput).FirstOrDefault(id => id != null);
+        }
+        catch (Exception ex) when (ex is COMException or PlatformNotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Sends an app to an output device (a device id), or back to the default with null, like "App volume
+    /// and device preferences" in Windows. Windows remembers it for the app; playing streams move over.
+    /// </summary>
+    public void SetAppOutput(AudioApp app, string? deviceId)
+    {
+        if (app.IsSystemSounds) return;
+        // Windows refuses some processes (E_INVALIDARG); the app's others still take it.
+        Exception? failure = null;
+        int done = 0;
+        foreach (int pid in app.ProcessIds)
+        {
+            try
+            {
+                AudioPolicyConfig.SetOutput(pid, deviceId);
+                done++;
+            }
+            catch (Exception ex) when (ex is COMException or ArgumentException)
+            {
+                failure = ex;
+            }
+        }
+        if (done == 0 && failure != null) throw new COMException(failure.Message, failure);
+    }
+
     // ---- device lifetime -------------------------------------------------------------------
 
     private void AttachToDefaultDevice()
@@ -146,18 +188,38 @@ public sealed class AudioService : IDisposable
 
         device.GetId(out var deviceId);
         var master = new MasterVolume(device, deviceId, ReadFriendlyName(device) ?? "Output device");
+        Marshal.ReleaseComObject(device);
+        lock (_gate) _master = master;
 
+        // Apps on every output, not just the default: an app routed to another device (or choosing one
+        // itself) stays in the mixer.
+        if (_enumerator.EnumAudioEndpoints(EDataFlow.Render, 1 /* DEVICE_STATE_ACTIVE */, out var collection) != 0) return;
+        try
+        {
+            collection.GetCount(out int count);
+            for (int i = 0; i < count; i++)
+            {
+                if (collection.Item(i, out var output) != 0 || output == null) continue;
+                try { WatchSessions(output); }
+                catch (COMException) { /* a device going away mid-attach */ }
+                finally { Marshal.ReleaseComObject(output); }
+            }
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(collection);
+        }
+    }
+
+    private void WatchSessions(IMMDevice device)
+    {
         var iid = AudioIids.AudioSessionManager2;
         Marshal.ThrowExceptionForHR(device.Activate(ref iid, AudioIids.ClsCtxAll, IntPtr.Zero, out var managerObject));
         var manager = (IAudioSessionManager2)managerObject;
+        var notifications = new SessionNotifications(this);
+        lock (_gate) _devices.Add((manager, notifications));
 
-        lock (_gate)
-        {
-            _master = master;
-            _sessionManager = manager;
-        }
-
-        manager.RegisterSessionNotification(_sessionNotifications);
+        manager.RegisterSessionNotification(notifications);
 
         // Enumerating also "arms" session notifications (a long-standing Core Audio quirk).
         if (manager.GetSessionEnumerator(out var sessions) == 0)
@@ -170,20 +232,19 @@ public sealed class AudioService : IDisposable
             }
             Marshal.ReleaseComObject(sessions);
         }
-        Marshal.ReleaseComObject(device);
     }
 
     private void DetachFromDevice()
     {
-        IAudioSessionManager2? manager;
+        (IAudioSessionManager2 Manager, SessionNotifications Notifications)[] devices;
         MasterVolume? master;
         AudioSession[] sessions;
         lock (_gate)
         {
-            manager = _sessionManager;
+            devices = _devices.ToArray();
             master = _master;
             sessions = _sessionOwners.Keys.ToArray();
-            _sessionManager = null;
+            _devices.Clear();
             _master = null;
             _sessionOwners.Clear();
             _apps.Clear();
@@ -191,9 +252,9 @@ public sealed class AudioService : IDisposable
 
         foreach (var session in sessions) session.Dispose();
         master?.Dispose();
-        if (manager != null)
+        foreach (var (manager, notifications) in devices)
         {
-            try { manager.UnregisterSessionNotification(_sessionNotifications); } catch (COMException) { }
+            try { manager.UnregisterSessionNotification(notifications); } catch (COMException) { }
             // Left to the GC rather than released here, like the sessions and master (see AudioSession.Dispose).
         }
     }
@@ -285,7 +346,7 @@ public sealed class AudioService : IDisposable
         bool created = false;
         lock (_gate)
         {
-            if (_sessionManager == null || _apps.Values.Any(a => a.Contains(session.InstanceId)))
+            if (_devices.Count == 0 || _apps.Values.Any(a => a.Contains(session.InstanceId)))
             {
                 session.Dispose();
                 return;
@@ -365,9 +426,16 @@ public sealed class AudioService : IDisposable
 
     private sealed class DeviceNotifications(AudioService owner) : IMMNotificationClient
     {
-        public int OnDeviceStateChanged(string deviceId, int newState) => 0;
-        public int OnDeviceAdded(string deviceId) => 0;
-        public int OnDeviceRemoved(string deviceId) => 0;
+        // An output coming or going: its apps join or leave the mixer.
+        public int OnDeviceStateChanged(string deviceId, int newState) { OnOutputsChanged(deviceId); return 0; }
+        public int OnDeviceAdded(string deviceId) { OnOutputsChanged(deviceId); return 0; }
+        public int OnDeviceRemoved(string deviceId) { OnOutputsChanged(deviceId); return 0; }
+
+        // Render endpoint ids start "{0.0.0."; recording ones "{0.0.1." don't concern the apps.
+        private void OnOutputsChanged(string deviceId)
+        {
+            if (deviceId.StartsWith("{0.0.0.", StringComparison.Ordinal)) owner.ScheduleRebuild();
+        }
         public int OnPropertyValueChanged(string deviceId, PropertyKey key) => 0;
 
         public int OnDefaultDeviceChanged(EDataFlow flow, ERole role, string? defaultDeviceId)

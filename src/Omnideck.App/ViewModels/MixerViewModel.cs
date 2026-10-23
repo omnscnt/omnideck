@@ -51,6 +51,43 @@ public sealed partial class MixerViewModel : ObservableObject
         }
     }
 
+    // ---- per-app output -------------------------------------------------------------------------
+
+    public static bool CanRouteApps => AudioService.CanRouteApps;
+
+    /// <summary>The device id an app is sent to; null when it follows the default.</summary>
+    public string? GetAppOutput(AppVolumeViewModel app) => _audio.GetAppOutput(app.App);
+
+    public void SetAppOutput(AppVolumeViewModel app, string? deviceId)
+    {
+        try
+        {
+            _audio.SetAppOutput(app.App, deviceId);
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or PlatformNotSupportedException)
+        {
+            // Windows refused (the process just exited, or no such feature): leave it as it was.
+        }
+        RefreshRouting();
+    }
+
+    /// <summary>
+    /// Re-reads where each app plays (on open: Windows Settings or the app itself may have changed it).
+    /// An app sent to the device that is the default anyway shows no badge.
+    /// </summary>
+    public void RefreshRouting()
+    {
+        var devices = _audio.GetOutputDevices();
+        foreach (var app in Apps) ReadRouting(app, devices);
+    }
+
+    private void ReadRouting(AppVolumeViewModel app, IReadOnlyList<AudioDeviceInfo> devices)
+    {
+        var id = _audio.GetAppOutput(app.App);
+        var device = id == null ? null : devices.FirstOrDefault(d => string.Equals(d.Id, id, StringComparison.OrdinalIgnoreCase));
+        app.RoutedTo = device == null || device.IsDefault ? null : device.Name;
+    }
+
     private DispatcherQueueTimer? _meterTimer;
 
     /// <summary>Level meters poll Core Audio only while the flyout is visible.</summary>
@@ -96,6 +133,7 @@ public sealed partial class MixerViewModel : ObservableObject
             ? Apps.Count
             : Apps.Count(a => !a.App.IsSystemSounds);
         Apps.Insert(index, vm);
+        if (!app.IsSystemSounds) ReadRouting(vm, _audio.GetOutputDevices());
     }
 
     private void Remove(AudioApp app)

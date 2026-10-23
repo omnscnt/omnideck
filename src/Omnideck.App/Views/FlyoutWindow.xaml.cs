@@ -97,6 +97,7 @@ public sealed partial class FlyoutWindow : Window
         AppsScroller.ChangeView(null, 0, null, true);
         QueueResize(); // Item templates realize on the first layout pass; re-measure once they exist.
         ViewModel.StartMetering();
+        ViewModel.RefreshRouting();
         _taskbarWatch.Start();
 
         StartSlide(entering: true, ShowDuration, onDone: null);
@@ -380,6 +381,43 @@ public sealed partial class FlyoutWindow : Window
         }
         if (OutputMenu.Items.Count == 0)
             OutputMenu.Items.Add(new MenuFlyoutItem { Text = "No output devices", IsEnabled = false });
+    }
+
+    /// <summary>
+    /// An app row's right-click menu: follow the default output, or play on a device of its own (Windows
+    /// remembers the choice for the app). Rebuilt on every open, like the output picker.
+    /// </summary>
+    private void OnAppOutputMenuOpening(object sender, object e)
+    {
+        var menu = (MenuFlyout)sender;
+        menu.Items.Clear();
+        if ((menu.Target as FrameworkElement)?.DataContext is not AppVolumeViewModel app || app.App.IsSystemSounds || !MixerViewModel.CanRouteApps)
+        {
+            menu.Items.Add(new MenuFlyoutItem { Text = "No output choice for this app", IsEnabled = false });
+            return;
+        }
+
+        string? current = ViewModel.GetAppOutput(app);
+        var devices = ViewModel.GetOutputDevices();
+        if (current != null && !devices.Any(d => string.Equals(d.Id, current, StringComparison.OrdinalIgnoreCase)))
+            current = null; // sent to a device that is gone: it plays on the default
+        string defaultName = devices.FirstOrDefault(d => d.IsDefault)?.Name ?? "Default output";
+        var follow = new RadioMenuFlyoutItem { Text = $"Default ({defaultName})", IsChecked = current == null, GroupName = "app-output" };
+        follow.Click += (_, _) => ViewModel.SetAppOutput(app, null);
+        menu.Items.Add(follow);
+        menu.Items.Add(new MenuFlyoutSeparator());
+        foreach (var device in devices)
+        {
+            var item = new RadioMenuFlyoutItem
+            {
+                Text = device.Name,
+                IsChecked = current != null && string.Equals(device.Id, current, StringComparison.OrdinalIgnoreCase),
+                GroupName = "app-output",
+            };
+            var id = device.Id;
+            item.Click += (_, _) => ViewModel.SetAppOutput(app, id);
+            menu.Items.Add(item);
+        }
     }
 
     private void OnSettingsClick(object sender, RoutedEventArgs e)

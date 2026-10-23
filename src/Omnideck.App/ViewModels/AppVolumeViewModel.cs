@@ -19,6 +19,15 @@ public sealed partial class AppVolumeViewModel : VolumeViewModelBase, IDisposabl
 
     public Visibility FallbackIconVisibility => Icon == null ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>The device this app is sent to, when not the default (its name; null follows the default).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RoutedVisibility), nameof(ToolTip))]
+    private string? _routedTo;
+
+    public Visibility RoutedVisibility => RoutedTo != null ? Visibility.Visible : Visibility.Collapsed;
+
+    public string ToolTip => RoutedTo != null ? $"{Name}\nPlays on {RoutedTo}" : Name;
+
     public string FallbackGlyph => App.IsSystemSounds ? "" : "";
 
     public AppVolumeViewModel(AudioApp app, DispatcherQueue dispatcher)
