@@ -41,6 +41,7 @@ public sealed class VolumeOsdFeed
         _widgetApp = widgetApp;
 
         runner.VolumeChanged += (_, target) => { if (_settings().Enabled) Show(target); };
+        runner.TrackSwitched += (app, track) => _ = OnTrackSwitchedAsync(app, track);
         audio.AppAdded += (_, app) => Watch(app);
         audio.AppRemoved += (_, app) => { lock (_gate) _watchedApps.Remove(app); };
         audio.DeviceChanged += (_, _) => WatchAll(); // a new device brings a new master and new app objects
@@ -89,7 +90,7 @@ public sealed class VolumeOsdFeed
     /// </summary>
     private void Show(IVolumeControl target)
     {
-        if (target is not AudioApp app || app.ProcessName.Length == 0 || !_settings().ShowNowPlaying || _widgetApp() == app.ProcessName)
+        if (target is not AudioApp app || app.ProcessName.Length == 0 || !_settings().ShowNowPlaying || !CardWanted(app.ProcessName))
         {
             _osd.Show(ContentFor(target));
             return;
@@ -101,6 +102,45 @@ public sealed class VolumeOsdFeed
         if (entry.Read.IsCompletedSuccessfully) _osd.Show(ContentFor(app) with { Media = entry.Read.Result });
         else _ = ShowWhenReadAsync(app, entry.Read);
     }
+
+    /// <summary>
+    /// No card where the track is already in sight: the taskbar widget showing that app, or (when set)
+    /// the app's own window in front.
+    /// </summary>
+    private bool CardWanted(string processName) =>
+        _widgetApp() != processName && !(_settings().NowPlayingSkipActive && ForegroundProcessName() == processName);
+
+    private static string? ForegroundProcessName()
+    {
+        var hwnd = GetForegroundWindow();
+        if (hwnd == IntPtr.Zero) return null;
+        GetWindowThreadProcessId(hwnd, out uint pid);
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById((int)pid);
+            return process.ProcessName.ToLowerInvariant();
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return null; // it just exited
+        }
+    }
+
+    /// <summary>A hotkey skipped to another track: the card alone, with the new track.</summary>
+    private async Task OnTrackSwitchedAsync(string processName, MediaTrack track)
+    {
+        var settings = _settings();
+        if (!settings.ShowNowPlaying || !settings.NowPlayingOnTrackSwitch || !CardWanted(processName)) return;
+        string key = track.AppId + "|" + track.Title;
+        byte[]? pixels = track.Cover is { } bytes ? await DecodeCoverAsync(bytes, (int)CoverPixels).ConfigureAwait(false) : null;
+        if (pixels != null) _cover = (key, pixels);
+        _tracks.TryRemove(processName, out _); // a volume change next shows the new track, not the cached one
+        var media = new OsdMedia(track.Title, track.Artist, pixels, (int)CoverPixels, track.Position, track.Duration, OsdMedia.Now);
+        _osd.Show(new OsdContent("track:" + processName, null, 0, 0, false, Media: media, CardOnly: true));
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
 
     private async Task ShowWhenReadAsync(AudioApp app, Task<OsdMedia?> read)
     {

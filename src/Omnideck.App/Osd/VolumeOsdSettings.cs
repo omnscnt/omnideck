@@ -26,6 +26,12 @@ public sealed class VolumeOsdSettings
     /// <summary>With an app's volume, a card with what it plays (cover, title, progress), unless the taskbar widget already shows it.</summary>
     public bool ShowNowPlaying { get; set; } = true;
 
+    /// <summary>The card alone when a hotkey skips to the next or previous track.</summary>
+    public bool NowPlayingOnTrackSwitch { get; set; } = true;
+
+    /// <summary>No card for the foreground window's app (its own window shows the track).</summary>
+    public bool NowPlayingSkipActive { get; set; }
+
     [System.Text.Json.Serialization.JsonIgnore]
     public bool AnyEnabled => Enabled || ShowMicrophone || ShowCapsLock || ShowNumLock || ShowScrollLock || ShowKeyboardLayout || ShowOutputDevice;
 
@@ -80,9 +86,10 @@ public readonly record struct OsdLayout(float Width, float Height, float Backing
 /// <param name="KeyOn">The key cap's light: on, off, or none (null).</param>
 /// <param name="KeyUnits">The key cap's width in key units (Caps Lock is wider than Num Lock).</param>
 /// <param name="Media">What the app plays, shown as a card next to its volume.</param>
+/// <param name="CardOnly">Only the media card, no pill (a track switched by a hotkey).</param>
 public sealed record OsdContent(
     string Key, byte[]? Icon, int IconSize, float Volume, bool Muted,
-    string? Glyph = null, string? Text = null, string? KeyLabel = null, bool? KeyOn = null, float KeyUnits = 1, OsdMedia? Media = null)
+    string? Glyph = null, string? Text = null, string? KeyLabel = null, bool? KeyOn = null, float KeyUnits = 1, OsdMedia? Media = null, bool CardOnly = false)
 {
     public static OsdContent Message(string key, string glyph, string text, bool dimmed = false) =>
         new(key, null, 0, 0, dimmed, glyph, text);

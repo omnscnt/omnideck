@@ -622,8 +622,30 @@ public sealed class TaskbarWidget : IDisposable
         return true;
     }
 
-    /// <summary>The app ("spotify") whose track is on the taskbar right now; null while the widget is hidden. Any thread.</summary>
-    public string? VisibleAppName => _visibleApp;
+    /// <summary>
+    /// The app ("spotify") whose track can be seen on the taskbar right now; null while the widget is hidden,
+    /// or is up but out of sight: an auto-hidden taskbar slid off the screen, a fullscreen window over it. Any thread.
+    /// </summary>
+    public string? VisibleAppName
+    {
+        get
+        {
+            var app = _visibleApp;
+            if (app == null || !OnScreen() || FullscreenInFront()) return null;
+            return app;
+        }
+    }
+
+    /// <summary>At least half of the widget is on its monitor (a hidden taskbar leaves only a sliver).</summary>
+    private bool OnScreen()
+    {
+        if (!GetWindowRect(_hwnd, out var r) || r.Bottom <= r.Top) return false;
+        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        if (!GetMonitorInfo(MonitorFromWindow(_hwnd, 2 /* MONITOR_DEFAULTTONEAREST */), ref info)) return true;
+        var m = info.rcMonitor;
+        int visible = Math.Min(r.Bottom, m.Bottom) - Math.Max(r.Top, m.Top);
+        return visible * 2 >= r.Bottom - r.Top;
+    }
 
     private volatile string? _visibleApp;
 

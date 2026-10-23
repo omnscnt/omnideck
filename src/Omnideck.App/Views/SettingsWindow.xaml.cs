@@ -673,6 +673,8 @@ public sealed partial class SettingsWindow : Window
         UpdateOsdPicker();
         OsdDurationSlider.Value = _osd.DurationMs / 1000.0;
         OsdExternalSwitch.IsOn = _osd.ShowExternalChanges;
+        OsdTrackSwitch.IsOn = _osd.NowPlayingOnTrackSwitch;
+        OsdSkipActiveSwitch.IsOn = _osd.NowPlayingSkipActive;
         OsdWidthSlider.Value = _osd.Width;
         OsdHeightSlider.Value = _osd.Height;
         OsdWidthText.Text = _osd.Width.ToString();
@@ -704,6 +706,8 @@ public sealed partial class SettingsWindow : Window
         _osd.ShowNowPlaying = _osdMedia.IsOn;
         _osd.DurationMs = (int)Math.Round(OsdDurationSlider.Value * 1000);
         _osd.ShowExternalChanges = OsdExternalSwitch.IsOn;
+        _osd.NowPlayingOnTrackSwitch = OsdTrackSwitch.IsOn;
+        _osd.NowPlayingSkipActive = OsdSkipActiveSwitch.IsOn;
         _osd.Width = (int)Math.Round(OsdWidthSlider.Value);
         _osd.Height = (int)Math.Round(OsdHeightSlider.Value);
         _osd.Backing = (int)Math.Round(OsdBackingSlider.Value);

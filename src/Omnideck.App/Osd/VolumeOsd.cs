@@ -34,6 +34,7 @@ public sealed class VolumeOsd : IDisposable
     private Phase _phase = Phase.Hidden;
     private double _opacity, _level, _holdUntil, _lastTick;
     private double _mediaDrawn; // a media card's progress bar moves: redrawn every MediaFrame while it holds
+    private double _mediaStart; // when the card's track appeared (its marquee's clock)
     private const double MediaFrame = 0.5;
     private int _x, _y; // top-left of the window at rest, physical px
     private double _scale = 1;
@@ -138,6 +139,8 @@ public sealed class VolumeOsd : IDisposable
         }
         else if (_phase != Phase.Hidden && (previous?.Media == null) != (content.Media == null))
             Place(); // the media card came or went: the window's height changes
+        if (content.Media != null && (_phase == Phase.Hidden || previous?.Media?.Title != content.Media.Title || previous.Key != content.Key))
+            _mediaStart = Now; // a new track on the card: its marquee starts over
         if (_phase == Phase.Hidden)
         {
             _layout = Settings.ToLayout(); // the size is taken when it appears
@@ -207,7 +210,7 @@ public sealed class VolumeOsd : IDisposable
                 break;
             case Phase.Holding:
                 if (now >= _holdUntil) _phase = Phase.Hiding;
-                else if (!levelMoving && !(_content.Media != null && now - _mediaDrawn >= MediaFrame)) return; // nothing changes on screen while it just sits there
+                else if (!levelMoving && !_view.MediaScrolls && !(_content.Media != null && now - _mediaDrawn >= MediaFrame)) return; // nothing changes on screen while it just sits there
                 break;
             case Phase.Hiding:
                 _opacity = Math.Max(0, _opacity - dt / FadeOut);
@@ -223,7 +226,7 @@ public sealed class VolumeOsd : IDisposable
         // Eased opacity; slides in from (and out toward) the nearer screen edge.
         float eased = (float)(1 - Math.Pow(1 - _opacity, 3));
         int slide = (int)Math.Round((1 - eased) * SlideDip * _scale) * (_fromBottom ? 1 : -1);
-        var pixels = _view.Render(_content, _layout, (float)_level, eased, _light, _scale, out int w, out int h);
+        var pixels = _view.Render(_content, _layout, (float)_level, eased, _light, _scale, out int w, out int h, Now - _mediaStart);
         _mediaDrawn = Now;
         Present(pixels, w, h, _x, _y + slide);
     }

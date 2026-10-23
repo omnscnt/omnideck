@@ -14,6 +14,9 @@ public sealed class HotkeyActionRunner(AudioService audio, MediaSessionService m
     /// <summary>Raised after the microphone was muted or unmuted by a hotkey.</summary>
     public event Action<MasterVolume>? MicrophoneToggled;
 
+    /// <summary>Raised once the track a hotkey skipped to is known, with its app ("spotify"). Thread-pool thread.</summary>
+    public event Action<string, MediaTrack>? TrackSwitched;
+
     public async Task RunAsync(HotkeyBinding binding)
     {
         if (binding.IsAppAction) return; // e.g. Open mixer: handled by the app
@@ -92,12 +95,22 @@ public sealed class HotkeyActionRunner(AudioService audio, MediaSessionService m
             _ => null,
         };
 
+        // A skip: listen for the new track from before the command, so it isn't missed.
+        var newTrack = binding.Action is HotkeyAction.NextTrack or HotkeyAction.PreviousTrack && TrackSwitched != null
+            ? media.WaitForTrackChangeAsync(app, TimeSpan.FromSeconds(3)) : null;
+
         switch (binding.Action)
         {
             case HotkeyAction.PlayPause: await media.TogglePlayPauseAsync(app).ConfigureAwait(false); break;
             case HotkeyAction.NextTrack: await media.NextAsync(app).ConfigureAwait(false); break;
             case HotkeyAction.PreviousTrack: await media.PreviousAsync(app).ConfigureAwait(false); break;
         }
+        if (newTrack != null) _ = ReportTrackAsync(newTrack); // not awaited: the next hotkey shouldn't wait on it
+    }
+
+    private async Task ReportTrackAsync(Task<(string AppName, MediaTrack Track)?> newTrack)
+    {
+        if (await newTrack.ConfigureAwait(false) is { } result) TrackSwitched?.Invoke(result.AppName, result.Track);
     }
 
     private static int? ForegroundProcessId()

@@ -1,5 +1,6 @@
 using System.Numerics;
 using Microsoft.Graphics.Canvas;
+using Microsoft.Graphics.Canvas.Brushes;
 using Microsoft.Graphics.Canvas.Effects;
 using Microsoft.Graphics.Canvas.Geometry;
 using Microsoft.Graphics.Canvas.Text;
@@ -61,6 +62,11 @@ public sealed class VolumeOsdView
             OsdPosition.BottomRight or OsdPosition.TopRight => width - w,
             _ => (width - w) / 2,
         };
+        if (content.CardOnly)
+        {
+            var alone = new Rect(ShadowMargin, ShadowMargin, cw, ch);
+            return (alone, alone); // no pill: its rect is the card's, never drawn
+        }
         bool cardAbove = position is OsdPosition.BottomCenter or OsdPosition.BottomLeft or OsdPosition.BottomRight;
         var pill = new Rect(X(pw), ShadowMargin + (cardAbove ? ch + gap : 0), pw, ph);
         var card = new Rect(X(cw), cardAbove ? ShadowMargin : ShadowMargin + ph + gap, cw, ch);
@@ -100,8 +106,10 @@ public sealed class VolumeOsdView
 
     /// <param name="level">The bar's (animated) level, 0..1.</param>
     /// <param name="opacity">The whole indicator's (animated) opacity.</param>
-    public byte[] Render(OsdContent content, OsdLayout layout, float level, float opacity, bool light, double scale, out int width, out int height)
+    /// <param name="mediaTime">Seconds since the media card's track appeared: drives the marquee of a long title.</param>
+    public byte[] Render(OsdContent content, OsdLayout layout, float level, float opacity, bool light, double scale, out int width, out int height, double mediaTime = 0)
     {
+        MediaScrolls = false;
         var size = SizeDip(content, layout);
         width = (int)Math.Ceiling(size.Width * scale);
         height = (int)Math.Ceiling(size.Height * scale);
@@ -152,25 +160,26 @@ public sealed class VolumeOsdView
                 {
                     using (var s = shape.CreateDrawingSession())
                     {
-                        s.FillRoundedRectangle(backing, radius, radius, Color.FromArgb(255, 0, 0, 0));
+                        if (!content.CardOnly) s.FillRoundedRectangle(backing, radius, radius, Color.FromArgb(255, 0, 0, 0));
                         if (card is Rect c) s.FillRoundedRectangle(c, cardRadius, cardRadius, Color.FromArgb(255, 0, 0, 0));
                     }
                     var shadow = new ShadowEffect { Source = shape, BlurAmount = 8, ShadowColor = Color.FromArgb(light ? (byte)50 : (byte)110, 0, 0, 0) };
                     ds.DrawImage(shadow, 0, 3);
                 }
 
-                // Semi-transparent backing with a hairline edge.
-                ds.FillRoundedRectangle(backing, radius, radius, backingColor);
-                float edge = Math.Max(0, radius - 0.5f);
-                ds.DrawRoundedRectangle(Inflate(backing, -0.5f), edge, edge, edgeColor, 1);
-
                 if (card is Rect cardRect && content.Media != null)
                 {
                     ds.FillRoundedRectangle(cardRect, cardRadius, cardRadius, backingColor);
                     float cardEdge = Math.Max(0, cardRadius - 0.5f);
                     ds.DrawRoundedRectangle(Inflate(cardRect, -0.5f), cardEdge, cardEdge, edgeColor, 1);
-                    DrawMedia(ds, content.Media, cardRect, cardRadius, layout, k, light, Fore, scale);
+                    DrawMedia(ds, content.Media, cardRect, cardRadius, layout, k, light, Fore, scale, mediaTime);
                 }
+                if (content.CardOnly) goto done;
+
+                // Semi-transparent backing with a hairline edge.
+                ds.FillRoundedRectangle(backing, radius, radius, backingColor);
+                float edge = Math.Max(0, radius - 0.5f);
+                ds.DrawRoundedRectangle(Inflate(backing, -0.5f), edge, edge, edgeColor, 1);
 
                 // Icon: the app's own, a given glyph, or a speaker that shows the level.
                 // Glyphs are laid out by their ink (the speaker by its widest variant, so the bar doesn't move with the level).
@@ -248,9 +257,10 @@ public sealed class VolumeOsdView
 
     /// <summary>
     /// The cover on the left (rounded to match the card, or a note on a tint while there is none); title
-    /// and artist at its top, one line each, cut with an ellipsis; the progress bar along its bottom.
+    /// and artist at its top, one line each, scrolling when too long (like the taskbar widget); the progress
+    /// bar along its bottom.
     /// </summary>
-    private void DrawMedia(CanvasDrawingSession ds, OsdMedia media, Rect card, float cardRadius, OsdLayout layout, float k, bool light, Func<double, Color> fore, double scale)
+    private void DrawMedia(CanvasDrawingSession ds, OsdMedia media, Rect card, float cardRadius, OsdLayout layout, float k, bool light, Func<double, Color> fore, double scale, double time)
     {
         if (!ReferenceEquals(media.Cover, _coverSource))
         {
@@ -294,16 +304,14 @@ public sealed class VolumeOsdView
         using var titleFormat = Format(layout.TextSize, bold: true);
         var titleCaps = Caps(titleFormat);
         float titleY = Snap((float)(cover.Y + 3 * k - titleCaps.Y), scale);
-        using (var title = new CanvasTextLayout(_device, media.Title, titleFormat, textWidth, 1000))
-            ds.DrawTextLayout(title, Snap(textLeft, scale), titleY, fore(0.95));
+        DrawMarqueeLine(ds, media.Title, titleFormat, Snap(textLeft, scale), titleY, textWidth, time, fore(0.95));
 
         if (media.Artist.Length > 0)
         {
             using var artistFormat = Format(Math.Max(9, layout.TextSize - 2), bold: false);
             var artistCaps = Caps(artistFormat);
             float artistY = Snap((float)(titleY + titleCaps.Y + titleCaps.Height + 7 * k - artistCaps.Y), scale);
-            using var artist = new CanvasTextLayout(_device, media.Artist, artistFormat, textWidth, 1000);
-            ds.DrawTextLayout(artist, Snap(textLeft, scale), artistY, fore(0.6));
+            DrawMarqueeLine(ds, media.Artist, artistFormat, Snap(textLeft, scale), artistY, textWidth, time, fore(0.6));
         }
 
         if (media.Progress(OsdMedia.Now) is float progress)
@@ -315,6 +323,51 @@ public sealed class VolumeOsdView
             float fill = progress * textWidth;
             if (fill > 0.5f)
                 ds.FillRoundedRectangle(new Rect(textLeft, barY, Math.Max(fill, barHeight), barHeight), barHeight / 2, barHeight / 2, fore(1));
+        }
+    }
+
+    /// <summary>True after a render whose card has a line that scrolls: it needs frames while it holds.</summary>
+    public bool MediaScrolls { get; private set; }
+
+    // The card shows briefly, so its marquee rests less than the widget's before it moves.
+    private const double MarqueeWait = 0.8, MarqueeSpeed = 30; // seconds, DIPs per second
+
+    /// <summary>
+    /// One line: as is when it fits; otherwise a marquee, as on the taskbar widget (two copies so it loops,
+    /// behind faded edges, the left one only once it moves).
+    /// </summary>
+    private void DrawMarqueeLine(CanvasDrawingSession ds, string text, CanvasTextFormat format, float x, float y, float width, double time, Color color)
+    {
+        using var layout = new CanvasTextLayout(_device, text, format, 100000, 1000);
+        float natural = (float)Math.Ceiling(layout.LayoutBounds.Width);
+        if (natural <= width + 0.5f)
+        {
+            ds.DrawTextLayout(layout, x, y, color);
+            return;
+        }
+        MediaScrolls = true;
+
+        float gap = Taskbar.TaskbarWidgetView.MarqueeGap, fade = Taskbar.TaskbarWidgetView.FadeWidth;
+        double cycle = MarqueeWait + (natural + gap) / MarqueeSpeed, phase = time % cycle;
+        float scroll = phase < MarqueeWait ? 0 : (float)((phase - MarqueeWait) * MarqueeSpeed);
+
+        float fadeLeft = Math.Min(fade, scroll) / width, fadeRight = fade / width;
+        var stops = new[]
+        {
+            new CanvasGradientStop { Position = 0, Color = Color.FromArgb(fadeLeft > 0 ? (byte)0 : (byte)255, 0, 0, 0) },
+            new CanvasGradientStop { Position = Math.Max(fadeLeft, 0.0001f), Color = Color.FromArgb(255, 0, 0, 0) },
+            new CanvasGradientStop { Position = 1 - fadeRight, Color = Color.FromArgb(255, 0, 0, 0) },
+            new CanvasGradientStop { Position = 1, Color = Color.FromArgb(0, 0, 0, 0) },
+        };
+        using var mask = new CanvasLinearGradientBrush(_device, stops)
+        {
+            StartPoint = new Vector2(x, 0), EndPoint = new Vector2(x + width, 0),
+        };
+        float height = (float)layout.LayoutBounds.Height;
+        using (ds.CreateLayer(mask, new Rect(x, y - 2, width, height + 4)))
+        {
+            ds.DrawTextLayout(layout, x - scroll, y, color);
+            ds.DrawTextLayout(layout, x - scroll + natural + gap, y, color);
         }
     }
 

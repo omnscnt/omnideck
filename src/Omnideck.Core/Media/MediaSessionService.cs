@@ -75,37 +75,76 @@ public sealed class MediaSessionService
         {
             var session = manager.GetSessions().FirstOrDefault(s => IsPlaying(s) && AppNameFromId(s.SourceAppUserModelId) == processName)
                 ?? manager.GetSessions().FirstOrDefault(s => IsPlaying(s) && s.SourceAppUserModelId.Contains(processName, StringComparison.OrdinalIgnoreCase));
-            if (session == null) return null;
-
-            var props = await session.TryGetMediaPropertiesAsync();
-            if (props == null || string.IsNullOrWhiteSpace(props.Title)) return null;
-
-            byte[]? cover = null;
-            if (withCover && props.Thumbnail != null)
-            {
-                try
-                {
-                    cover = await NowPlayingWatcher.ReadAllAsync(props.Thumbnail).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or IOException)
-                {
-                }
-            }
-
-            // Apps update the timeline now and then (Spotify every few seconds); between updates it runs on.
-            var timeline = session.GetTimelineProperties();
-            var duration = timeline.EndTime - timeline.StartTime;
-            var position = timeline.Position - timeline.StartTime;
-            if (timeline.LastUpdatedTime.Year > 2000) position += DateTimeOffset.Now - timeline.LastUpdatedTime;
-            if (duration > TimeSpan.Zero) position = position < TimeSpan.Zero ? TimeSpan.Zero : position > duration ? duration : position;
-
-            string artist = !string.IsNullOrWhiteSpace(props.Artist) ? props.Artist : props.AlbumArtist ?? "";
-            return new MediaTrack(session.SourceAppUserModelId, props.Title, artist, cover, position, duration);
+            return session == null ? null : await ReadTrackAsync(session, withCover).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
         {
             return null; // the session went away mid-read
         }
+    }
+
+    /// <summary>
+    /// Waits for an app's session (Windows' current one when <paramref name="appName"/> is null) to change
+    /// track, then reads the new one, cover included. Start it before sending the skip: it listens from the
+    /// first moment. Null when nothing changes within <paramref name="timeout"/>.
+    /// </summary>
+    public async Task<(string AppName, MediaTrack Track)?> WaitForTrackChangeAsync(string? appName, TimeSpan timeout)
+    {
+        var session = await FindSessionAsync(appName).ConfigureAwait(false);
+        if (session == null) return null;
+        var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        DateTimeOffset changedAt = default;
+        Windows.Foundation.TypedEventHandler<GlobalSystemMediaTransportControlsSession, MediaPropertiesChangedEventArgs> handler = (_, _) => changed.TrySetResult();
+        try
+        {
+            session.MediaPropertiesChanged += handler;
+            try
+            {
+                if (await Task.WhenAny(changed.Task, Task.Delay(timeout)).ConfigureAwait(false) != changed.Task) return null;
+                changedAt = DateTimeOffset.Now;
+                await Task.Delay(300).ConfigureAwait(false); // title, artist and cover arrive in separate steps
+            }
+            finally
+            {
+                session.MediaPropertiesChanged -= handler;
+            }
+            var track = await ReadTrackAsync(session, withCover: true, changedAt).ConfigureAwait(false);
+            return track == null ? null : (AppNameFromId(session.SourceAppUserModelId), track);
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    /// <param name="changedAt">When the track changed, if just now: a timeline older than that is still the last track's, so it starts at 0.</param>
+    private static async Task<MediaTrack?> ReadTrackAsync(GlobalSystemMediaTransportControlsSession session, bool withCover, DateTimeOffset? changedAt = null)
+    {
+        var props = await session.TryGetMediaPropertiesAsync();
+        if (props == null || string.IsNullOrWhiteSpace(props.Title)) return null;
+
+        byte[]? cover = null;
+        if (withCover && props.Thumbnail != null)
+        {
+            try
+            {
+                cover = await NowPlayingWatcher.ReadAllAsync(props.Thumbnail).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or IOException)
+            {
+            }
+        }
+
+        // Apps update the timeline now and then (Spotify every few seconds); between updates it runs on.
+        var timeline = session.GetTimelineProperties();
+        var duration = timeline.EndTime - timeline.StartTime;
+        var position = timeline.Position - timeline.StartTime;
+        if (changedAt is { } at && timeline.LastUpdatedTime < at) position = TimeSpan.Zero;
+        else if (timeline.LastUpdatedTime.Year > 2000) position += DateTimeOffset.Now - timeline.LastUpdatedTime;
+        if (duration > TimeSpan.Zero) position = position < TimeSpan.Zero ? TimeSpan.Zero : position > duration ? duration : position;
+
+        string artist = !string.IsNullOrWhiteSpace(props.Artist) ? props.Artist : props.AlbumArtist ?? "";
+        return new MediaTrack(session.SourceAppUserModelId, props.Title, artist, cover, position, duration);
     }
 
     private static bool IsPlaying(GlobalSystemMediaTransportControlsSession session) =>

@@ -824,6 +824,44 @@
                             </Grid>
                         </Border>
 
+                        <TextBlock Margin="2,20,0,6" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Now playing" />
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="On track switch" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Show the card when a hotkey skips to the next or previous track." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="OsdTrackSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Card on track switch" Toggled="OnOsdChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border Margin="0,4,0,0" Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Not for the active window" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="No card for the app you are in: its own window already shows the track. The taskbar widget showing the app also hides the card." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="OsdSkipActiveSwitch" Grid.Column="1" MinWidth="0" OffContent="" OnContent="" HorizontalAlignment="Right" AutomationProperties.Name="Not for the active window" Toggled="OnOsdChanged" />
+                            </Grid>
+                        </Border>
+
                         <TextBlock Margin="2,20,0,6" Style="{StaticResource BodyStrongTextBlockStyle}" Text="Lock keys" />
 
                         <Border Style="{StaticResource SettingsCardStyle}">
