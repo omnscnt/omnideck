@@ -79,6 +79,11 @@
                         <FontIcon Glyph="&#xE9E9;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="Devices" Tag="devices">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE772;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="OSD" Tag="osd">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE7F4;" />
@@ -1030,6 +1035,152 @@
                                     Grid.Column="1" HorizontalAlignment="Right"
                                     AutomationProperties.Name="Full device names"
                                     Toggled="OnMixerLayoutChanged" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+                </ScrollViewer>
+
+                <!-- Devices page: wireless batteries -->
+                <ScrollViewer x:Name="DevicesPage" Visibility="Collapsed">
+                <Grid x:Name="DevicesContent" Padding="36,8,36,36">
+                    <StackPanel Spacing="4">
+                        <TextBlock Margin="0,0,0,16" Style="{StaticResource TitleTextBlockStyle}" Text="Devices" />
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <StackPanel Spacing="10">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="Batteries" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                            TextWrapping="Wrap"
+                                            Text="Bluetooth devices that report their charge, and SteelSeries wireless mice (Prime, Aerox) on their receiver or cable." />
+                                    </StackPanel>
+                                    <Button x:Name="DevicesRefreshButton" Grid.Column="1" HorizontalAlignment="Right" Click="OnDevicesRefresh" Content="Refresh" />
+                                </Grid>
+                                <ItemsControl x:Name="DevicesList">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Spacing="4" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:BatteryChip">
+                                            <Border Padding="12,8" Background="{ThemeResource ControlAltFillColorSecondaryBrush}" BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="5">
+                                                <Grid ColumnSpacing="12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <FontIcon VerticalAlignment="Center" FontSize="16" Glyph="{x:Bind Glyph}" />
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Style="{StaticResource CaptionTextBlockStyle}" Text="{x:Bind Source}" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal" Spacing="4">
+                                                        <FontIcon FontSize="12" Glyph="&#xE945;" Visibility="{x:Bind ChargingVisibility}" />
+                                                        <TextBlock Foreground="{x:Bind LevelBrush}" Text="{x:Bind LevelText}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock
+                                    x:Name="DevicesEmptyText"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Style="{StaticResource CaptionTextBlockStyle}"
+                                    TextWrapping="Wrap"
+                                    Text="No device with a readable battery found. A mouse that is off or asleep doesn't answer." />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Read batteries" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Off: no device is asked anything." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="DevicesEnabledSwitch" Grid.Column="1" MinWidth="0" HorizontalAlignment="Right" AutomationProperties.Name="Read batteries" Toggled="OnDevicesChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="DevicesPollCard" Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Check every" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Batteries change slowly. Opening the mixer checks too, if the last check is over a minute old." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                                    <Slider x:Name="DevicesPollSlider" Width="180" VerticalAlignment="Center" AutomationProperties.Name="Check every"
+                                        Maximum="30" Minimum="1" StepFrequency="1" ValueChanged="OnDevicesSliderChanged" />
+                                    <TextBlock x:Name="DevicesPollText" Width="48" VerticalAlignment="Center" TextAlignment="Right" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="DevicesMixerCard" Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Show in the mixer" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Each device's charge on a plaque above the mixer." />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="DevicesMixerSwitch" Grid.Column="1" MinWidth="0" HorizontalAlignment="Right" AutomationProperties.Name="Show in the mixer" Toggled="OnDevicesChanged" />
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="DevicesLowCard" Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Low battery notice" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="A notification once a device drops to this level; again only after it has charged." />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="12">
+                                    <Slider x:Name="DevicesLowSlider" Width="140" VerticalAlignment="Center" AutomationProperties.Name="Low battery level"
+                                        Maximum="50" Minimum="5" StepFrequency="5" ValueChanged="OnDevicesSliderChanged" />
+                                    <TextBlock x:Name="DevicesLowText" Width="36" VerticalAlignment="Center" TextAlignment="Right" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="DevicesLowSwitch" Grid.Column="2" MinWidth="0" HorizontalAlignment="Right" AutomationProperties.Name="Low battery notice" Toggled="OnDevicesChanged" />
                             </Grid>
                         </Border>
                     </StackPanel>

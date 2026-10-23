@@ -29,6 +29,8 @@ public sealed class AppSettings
     /// <summary>Device names with the adapter in brackets ("Headphones (CS43131 HIFI Audio)"), not just "Headphones".</summary>
     public bool FullDeviceNames { get; set; }
 
+    public DeviceSettings Devices { get; set; } = new();
+
     public UpdateSettings Updates { get; set; } = new();
 }
 
@@ -130,4 +132,25 @@ public static class SettingsStore
         try { if (File.Exists(FilePath)) File.Copy(FilePath, BackupPath, overwrite: true); } catch (IOException) { }
         File.Move(temp, FilePath, overwrite: true); // atomic replace: never leaves a half-written file
     }
+}
+
+/// <summary>Wireless devices' batteries: whether to read them, where to show them, when to warn.</summary>
+public sealed class DeviceSettings
+{
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>A plaque above the mixer with each device's level.</summary>
+    public bool ShowInMixer { get; set; } = true;
+
+    /// <summary>A tray notice once a device drops to <see cref="LowThreshold"/> % (again only after it charged).</summary>
+    public bool LowBatteryNotice { get; set; } = true;
+
+    public int LowThreshold { get; set; } = 15;
+
+    /// <summary>How often to read them, in minutes.</summary>
+    public int PollMinutes { get; set; } = 5;
+
+    public const int MinThreshold = 5, MaxThreshold = 50, MinPoll = 1, MaxPoll = 30;
+
+    public DeviceSettings Clone() => (DeviceSettings)MemberwiseClone();
 }

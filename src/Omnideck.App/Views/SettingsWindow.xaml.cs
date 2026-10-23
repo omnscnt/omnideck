@@ -45,6 +45,7 @@ public sealed partial class SettingsWindow : Window
         AutoStartSwitch.IsOn = AutoStart.IsEnabled;
         LogVolumeSwitch.IsOn = App.Instance.LogarithmicVolume;
         LoadMixerSettings();
+        LoadDeviceSettings();
         LoadWidgetSettings();
         SetupOsdTiles();
         LoadOsdSettings();
@@ -163,6 +164,7 @@ public sealed partial class SettingsWindow : Window
         GeneralContent.Padding = new Thickness(side, 8, side, 36);
         OsdContentGrid.Padding = new Thickness(side, 8, side, 36);
         MixerContent.Padding = new Thickness(side, 8, side, 36);
+        DevicesContent.Padding = new Thickness(side, 8, side, 36);
     }
 
     private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -173,6 +175,7 @@ public sealed partial class SettingsWindow : Window
         WidgetPage.Visibility = tag == "widget" ? Visibility.Visible : Visibility.Collapsed;
         OsdPage.Visibility = tag == "osd" ? Visibility.Visible : Visibility.Collapsed;
         MixerPage.Visibility = tag == "mixer" ? Visibility.Visible : Visibility.Collapsed;
+        DevicesPage.Visibility = tag == "devices" ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>Adds a blank hotkey above the add card; its card unfolds and starts recording (see HotkeyCard).</summary>
@@ -761,6 +764,69 @@ public sealed partial class SettingsWindow : Window
     {
         if (LogVolumeSwitch.IsOn != App.Instance.LogarithmicVolume) App.Instance.LogarithmicVolume = LogVolumeSwitch.IsOn;
     }
+
+    // ---- devices: wireless batteries ---------------------------------------------------------------
+
+    private bool _loadingDevices = true; // until LoadDeviceSettings, as with the mixer's
+    private DeviceSettings _devices = new();
+
+    private void LoadDeviceSettings()
+    {
+        _loadingDevices = true;
+        _devices = App.Instance.DeviceSettings;
+        DevicesEnabledSwitch.IsOn = _devices.Enabled;
+        DevicesMixerSwitch.IsOn = _devices.ShowInMixer;
+        DevicesLowSwitch.IsOn = _devices.LowBatteryNotice;
+        DevicesLowSlider.Value = _devices.LowThreshold;
+        DevicesPollSlider.Value = _devices.PollMinutes;
+        ShowDeviceSettings();
+        _loadingDevices = false;
+
+        ShowBatteries(App.Instance.Batteries);
+        // Readings arrive on a pool thread; the page keeps up while the window lives.
+        Action<IReadOnlyList<Omnideck.Core.Devices.DeviceBattery>> changed = devices => DispatcherQueue.TryEnqueue(() => ShowBatteries(devices));
+        App.Instance.BatteriesChanged += changed;
+        Closed += (_, _) => App.Instance.BatteriesChanged -= changed;
+    }
+
+    private void ShowBatteries(IReadOnlyList<Omnideck.Core.Devices.DeviceBattery> devices)
+    {
+        DevicesList.ItemsSource = devices.Select(d => new BatteryChip(d, _devices.LowThreshold)).ToList();
+        DevicesEmptyText.Visibility = devices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        DevicesEmptyText.Text = _devices.Enabled
+            ? "No device with a readable battery found. A mouse that is off or asleep doesn't answer."
+            : "Reading batteries is off.";
+        DevicesRefreshButton.IsEnabled = _devices.Enabled;
+    }
+
+    private void ShowDeviceSettings()
+    {
+        DevicesPollText.Text = $"{(int)DevicesPollSlider.Value} min";
+        DevicesLowText.Text = $"{(int)DevicesLowSlider.Value}%";
+        // The rest only matters while batteries are read; the threshold only with the notice on.
+        foreach (var card in new[] { DevicesPollCard, DevicesMixerCard, DevicesLowCard }) card.Opacity = DevicesEnabledSwitch.IsOn ? 1 : 0.5;
+        DevicesPollSlider.IsEnabled = DevicesMixerSwitch.IsEnabled = DevicesLowSwitch.IsEnabled = DevicesEnabledSwitch.IsOn;
+        DevicesLowSlider.IsEnabled = DevicesEnabledSwitch.IsOn && DevicesLowSwitch.IsOn;
+    }
+
+    private void OnDevicesChanged(object sender, RoutedEventArgs e) => ApplyDeviceSettings();
+
+    private void OnDevicesSliderChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e) => ApplyDeviceSettings();
+
+    private void ApplyDeviceSettings()
+    {
+        if (_loadingDevices) return;
+        ShowDeviceSettings();
+        _devices.Enabled = DevicesEnabledSwitch.IsOn;
+        _devices.ShowInMixer = DevicesMixerSwitch.IsOn;
+        _devices.LowBatteryNotice = DevicesLowSwitch.IsOn;
+        _devices.LowThreshold = (int)DevicesLowSlider.Value;
+        _devices.PollMinutes = (int)DevicesPollSlider.Value;
+        App.Instance.ApplyDeviceSettings(_devices);
+        ShowBatteries(App.Instance.Batteries);
+    }
+
+    private void OnDevicesRefresh(object sender, RoutedEventArgs e) => App.Instance.RefreshBatteries(force: true);
 
     // ---- mixer: output device per app ---------------------------------------------------------------
 

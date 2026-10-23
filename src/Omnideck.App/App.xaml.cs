@@ -2,6 +2,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Omnideck.Core;
 using Omnideck.Core.Hotkeys;
+using Omnideck.Core.Devices;
 using Omnideck.Core.Media;
 using Omnideck.Osd;
 using Omnideck.Services;
@@ -27,6 +28,8 @@ public partial class App : Application
     private VolumeOsdFeed? _osdFeed;
     private OsdNoticeFeed? _notices;
     private Timer? _updateTimer;
+    private BatteryMonitor? _batteries;
+    private LowBatteryNotifier? _lowBattery;
 
     public static App Instance => (App)Current;
 
@@ -104,6 +107,16 @@ public partial class App : Application
         _osd.Configure(_settings.VolumeOsd);
         _osdFeed = new VolumeOsdFeed(_audio, _runner, _osd, () => _settings.VolumeOsd, media, () => _widget?.VisibleAppName);
         _notices = new OsdNoticeFeed(_audio, _hotkeys, _osd, () => _settings.VolumeOsd);
+
+        _lowBattery = new LowBatteryNotifier((title, text) => dispatcher.TryEnqueue(() => _tray?.Notify(title, text)));
+        _batteries = new BatteryMonitor();
+        _batteries.Changed += devices =>
+        {
+            _lowBattery.Check(devices, _settings.Devices);
+            BatteriesChanged?.Invoke(devices);
+            dispatcher.TryEnqueue(() => _flyout?.ViewModel.SetBatteries(devices, _settings.Devices.Enabled && _settings.Devices.ShowInMixer, _settings.Devices.LowThreshold));
+        };
+        ApplyDevices();
 
         new Thread(() =>
         {
@@ -244,6 +257,42 @@ public partial class App : Application
     private void ApplyMixerLayout() =>
         _flyout?.ViewModel.Configure(_settings.AppOutputs && MixerViewModel.CanRouteApps, _settings.ExpandedOutputWidth, _settings.FullDeviceNames);
 
+    // ---- devices: wireless batteries ----------------------------------------------------------------
+
+    public DeviceSettings DeviceSettings => _settings.Devices.Clone();
+
+    /// <summary>What the last read found (none while reading is off).</summary>
+    public IReadOnlyList<DeviceBattery> Batteries => _batteries?.Devices ?? [];
+
+    /// <summary>Raised with each new read, on a thread-pool thread.</summary>
+    public event Action<IReadOnlyList<DeviceBattery>>? BatteriesChanged;
+
+    public void ApplyDeviceSettings(DeviceSettings settings)
+    {
+        _settings.Devices = settings.Clone();
+        SettingsStore.Save(_settings);
+        ApplyDevices();
+    }
+
+    private void ApplyDevices()
+    {
+        if (_batteries == null) return;
+        var settings = _settings.Devices;
+        if (settings.Enabled)
+            _batteries.Start(TimeSpan.FromMinutes(Math.Clamp(settings.PollMinutes, DeviceSettings.MinPoll, DeviceSettings.MaxPoll)));
+        else
+            _batteries.Stop();
+        _flyout?.ViewModel.SetBatteries(_batteries.Devices, settings.Enabled && settings.ShowInMixer, settings.LowThreshold);
+    }
+
+    /// <summary>Reads the batteries again now (the mixer opening, the settings page's Refresh), unless just read.</summary>
+    public void RefreshBatteries(bool force = false)
+    {
+        if (_batteries == null || !_settings.Devices.Enabled) return;
+        if (force) _ = _batteries.RefreshAsync();
+        else _batteries.RefreshIfOlderThan(TimeSpan.FromMinutes(1));
+    }
+
     // ---- updates ----------------------------------------------------------------------------------
 
     public bool CheckUpdatesAutomatically
@@ -291,6 +340,7 @@ public partial class App : Application
     private void Shutdown()
     {
         _updateTimer?.Dispose();
+        _batteries?.Dispose();
         _osd?.Dispose();
         _widget?.Dispose();
         _nowPlaying?.Dispose();

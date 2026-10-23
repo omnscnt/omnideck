@@ -165,6 +165,22 @@ public sealed partial class MixerViewModel : ObservableObject
         app.RoutedTo = device == null || device.IsDefault ? null : device.Name;
     }
 
+    // ---- wireless batteries, on the plaque above the mixer ------------------------------------------
+
+    public ObservableCollection<BatteryChip> Batteries { get; } = [];
+
+    [ObservableProperty]
+    private Visibility _batteriesVisibility = Visibility.Collapsed;
+
+    /// <summary>The plaque's chips: one per device, when shown at all.</summary>
+    public void SetBatteries(IReadOnlyList<Omnideck.Core.Devices.DeviceBattery> devices, bool show, int lowThreshold)
+    {
+        Batteries.Clear();
+        if (show)
+            foreach (var device in devices) Batteries.Add(new BatteryChip(device, lowThreshold));
+        BatteriesVisibility = Batteries.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private DispatcherQueueTimer? _meterTimer;
 
     /// <summary>Level meters poll Core Audio only while the flyout is visible.</summary>

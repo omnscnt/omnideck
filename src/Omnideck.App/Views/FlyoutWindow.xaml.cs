@@ -58,6 +58,8 @@ public sealed partial class FlyoutWindow : Window
         // Mid-widening the frame callback sizes the window itself, in step with the content.
         ViewModel.PropertyChanged += (_, _) => { if (!_expanding) QueueResize(); };
         ViewModel.ExpandToggled += StartExpand;
+        _panel = new BatteryPanelWindow(viewModel);
+        ViewModel.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MixerViewModel.BatteriesVisibility)) OnBatteriesVisibilityChanged(); };
 
         // No DWM show/hide transition: the slide is the animation, and a fade after it reads as a glitch.
         int disabled = 1;
@@ -84,12 +86,19 @@ public sealed partial class FlyoutWindow : Window
     public void Show()
     {
         _anchor = TaskbarPlacement.Capture();
+        _panelShown = PanelWanted;
         UpdateBounds();
 
         // Start pushed toward the taskbar, then slide the whole window (content and acrylic) out.
         // Cloaked until XAML has presented a frame, so a fresh window never flashes black.
         AppWindow.Move(Offset(_target.X, _target.Y, 1.0));
         SetCloaked(true);
+        if (_panelShown)
+        {
+            MovePanel(1.0);
+            _panel.SetCloaked(true);
+            _panel.ShowQuietly();
+        }
         AppWindow.Show(true);
         if (!_isOpen) _previousForeground = TaskbarPlacement.ForegroundWindow;
         _focusAttempts = 0;
@@ -100,6 +109,7 @@ public sealed partial class FlyoutWindow : Window
         QueueResize(); // Item templates realize on the first layout pass; re-measure once they exist.
         ViewModel.StartMetering();
         ViewModel.RefreshRouting();
+        App.Instance.RefreshBatteries();
         _taskbarWatch.Start();
 
         StartSlide(entering: true, ShowDuration, onDone: null);
@@ -116,6 +126,9 @@ public sealed partial class FlyoutWindow : Window
         UpdateBounds();
         SetCloaked(true);
         AppWindow.Show(false);
+        _panel.Place(_panelTarget); // the plaque warms up the same way (it may be needed on the first open)
+        _panel.SetCloaked(true);
+        _panel.ShowQuietly();
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
         int frames = 0;
@@ -124,6 +137,7 @@ public sealed partial class FlyoutWindow : Window
             if (++frames < 10 || clock.ElapsedMilliseconds < 300) return;
             CompositionTarget.Rendering -= OnFrame;
             if (_isOpen) return; // the user opened it meanwhile; Show() owns the cloak now
+            _panel.HideQuietly();
             AppWindow.Hide();
             SetCloaked(false);
         }
@@ -146,6 +160,9 @@ public sealed partial class FlyoutWindow : Window
             // auto-hidden taskbar nothing covers them) for the frame or two that Hide takes. Show re-cloaks anyway.
             SetCloaked(true);
             AppWindow.Hide();
+            _panel.SetCloaked(true);
+            _panel.HideQuietly();
+            _panelShown = false;
         });
     }
 
@@ -231,12 +248,14 @@ public sealed partial class FlyoutWindow : Window
             // high-refresh display callbacks come every few ms): wait for frames *and* time.
             if (++_cloakedFrames < 2 || _cloakClock.ElapsedMilliseconds < 50) return;
             SetCloaked(false);
+            if (_panelShown) _panel.SetCloaked(false);
         }
         if (!_slideClock.IsRunning)
         {
             _slideClock.Start();
             // Activation lifts us to the top of the always-on-top band; drop back just under the taskbar.
             TaskbarPlacement.PlaceBelowTaskbar(_hwnd);
+            if (_panelShown) StackPanelOverMixer();
         }
         double t = Math.Clamp(_slideClock.Elapsed.TotalMilliseconds / _slideDuration.TotalMilliseconds, 0, 1);
         // Entering: strong decelerate (ease-out quart), like the shell. Leaving: accelerate (ease-in cubic).
@@ -244,6 +263,7 @@ public sealed partial class FlyoutWindow : Window
         double away = _slideEntering ? 1 - progress : progress; // 1 = fully pushed toward the taskbar
 
         AppWindow.Move(Offset(_target.X, _target.Y, away));
+        MovePanel(away);
 
         if (t >= 1)
         {
@@ -319,7 +339,9 @@ public sealed partial class FlyoutWindow : Window
     private PointInt32 Offset(int x, int y, double away)
     {
         int margin = (int)Math.Round(MarginDip * _anchor.Scale);
-        int travel = _anchor.Edge is TaskbarEdge.Left or TaskbarEdge.Right ? _target.Width + margin : _target.Height + margin;
+        // Up from (or down to) the taskbar the plaque travels too: the slide covers it, so it hides behind the taskbar as well.
+        int panel = _panelShown && _anchor.Edge is TaskbarEdge.Top or TaskbarEdge.Bottom ? _panelTarget.Height + margin : 0;
+        int travel = _anchor.Edge is TaskbarEdge.Left or TaskbarEdge.Right ? _target.Width + margin : _target.Height + margin + panel;
         int d = (int)Math.Round(travel * away);
         return _anchor.Edge switch
         {
@@ -410,7 +432,8 @@ public sealed partial class FlyoutWindow : Window
 
         AppsScroller.MaxHeight = Math.Max(120, Math.Min(MaxAppsHeightDip, workHeightDip - 260));
         Card.Measure(new Size(WidthDip, double.PositiveInfinity));
-        double heightDip = Math.Min(Card.DesiredSize.Height, workHeightDip - 2 * MarginDip);
+        double panelDip = _panelShown ? BatteryPanelWindow.HeightDip + MarginDip : 0; // the plaque above takes its share
+        double heightDip = Math.Min(Card.DesiredSize.Height, workHeightDip - 2 * MarginDip - panelDip);
 
         // Size the client area, not the frame: the border-only presenter still reserves a few
         // non-client pixels, which otherwise get cut from the bottom of the content.
@@ -424,10 +447,70 @@ public sealed partial class FlyoutWindow : Window
         int y = anchor.Edge == TaskbarEdge.Top ? anchor.WorkArea.Y + margin : anchor.Bottom - margin - height;
 
         _target = new RectInt32(x, y, width, height);
+        // The plaque: as wide as the mixer, a margin away on the side away from the taskbar.
+        var panelFrame = _panel.AppWindow.Size;
+        var panelClient = _panel.AppWindow.ClientSize;
+        int panelHeight = (int)Math.Ceiling(BatteryPanelWindow.HeightDip * scale) + (panelFrame.Height - panelClient.Height);
+        int panelWidth = width - (frame.Width - client.Width) + (panelFrame.Width - panelClient.Width);
+        int panelY = anchor.Edge == TaskbarEdge.Top ? y + height + margin : y - margin - panelHeight;
+        _panelTarget = new RectInt32(x, panelY, panelWidth, panelHeight);
         // Mid-slide the frame callback owns the position; only take the new size.
-        if (_sliding) AppWindow.Resize(new SizeInt32(width, height));
-        else AppWindow.MoveAndResize(_target);
+        if (_sliding)
+        {
+            AppWindow.Resize(new SizeInt32(width, height));
+            if (_panelShown) _panel.AppWindow.Resize(new SizeInt32(panelWidth, panelHeight));
+        }
+        else
+        {
+            AppWindow.MoveAndResize(_target);
+            if (_panelShown) _panel.Place(_panelTarget);
+        }
     }
+
+    // ---- the batteries' plaque -----------------------------------------------------------------------
+
+    private readonly BatteryPanelWindow _panel;
+    private RectInt32 _panelTarget;
+    private bool _panelShown; // shown with the mixer (decided as it opens, or when batteries come or go)
+
+    private bool PanelWanted => ViewModel.BatteriesVisibility == Visibility.Visible;
+
+    /// <summary>The plaque follows the mixer's slide, offset just as far.</summary>
+    private void MovePanel(double away)
+    {
+        if (!_panelShown) return;
+        var mixer = Offset(_target.X, _target.Y, away);
+        _panel.Move(new PointInt32(_panelTarget.X + mixer.X - _target.X, _panelTarget.Y + mixer.Y - _target.Y));
+    }
+
+    /// <summary>Batteries found or gone while the mixer is open: the plaque appears or goes, the mixer makes room.</summary>
+    private void OnBatteriesVisibilityChanged()
+    {
+        if (!_isOpen || PanelWanted == _panelShown) return;
+        _panelShown = PanelWanted;
+        UpdateBounds();
+        if (_panelShown)
+        {
+            _panel.Place(_panelTarget);
+            _panel.SetCloaked(false);
+            _panel.ShowQuietly();
+            StackPanelOverMixer();
+        }
+        else _panel.HideQuietly();
+    }
+
+    /// <summary>
+    /// The plaque never activates, so nothing lifts it: put it just under the taskbar and the mixer right
+    /// after it. Otherwise it could stay behind whatever window the mixer opened over.
+    /// </summary>
+    private void StackPanelOverMixer()
+    {
+        TaskbarPlacement.PlaceBelowTaskbar(_panel.Handle);
+        SetWindowPos(_hwnd, _panel.Handle, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); // NOSIZE | NOMOVE | NOACTIVATE
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
 
     // ---- events ------------------------------------------------------------------------------
 
