@@ -32,6 +32,16 @@
                     <Setter Property="BorderThickness" Value="1" />
                     <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
                 </Style>
+                <!-- The volume's number: a box like the output button next to it. -->
+                <Style x:Key="ValueBoxStyle" TargetType="Border">
+                    <Setter Property="Height" Value="28" />
+                    <Setter Property="VerticalAlignment" Value="Center" />
+                    <Setter Property="CornerRadius" Value="5" />
+                    <Setter Property="Background" Value="{ThemeResource ControlAltFillColorSecondaryBrush}" />
+                    <Setter Property="BorderBrush" Value="{ThemeResource SurfaceStrokeColorDefaultBrush}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                </Style>
+
                 <!-- An app's output button: outlined, quiet fill, in both the narrow and the wide mixer. -->
                 <Style x:Key="OutputButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
                     <Setter Property="MinHeight" Value="0" />
@@ -95,7 +105,7 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="38" />
+                        <ColumnDefinition Width="48" />
                     </Grid.ColumnDefinitions>
                     <controls:LevelMeter Margin="0,0,-2,0" Style="{StaticResource LevelMeterStyle}" Level="{x:Bind ViewModel.Master.Level, Mode=OneWay, FallbackValue=0}" />
                     <Button
@@ -115,12 +125,9 @@
                         Minimum="0"
                         StepFrequency="1"
                         Value="{x:Bind ViewModel.Master.Volume, Mode=TwoWay, FallbackValue=0}" />
-                    <TextBlock
-                        Grid.Column="3"
-                        HorizontalTextAlignment="Right"
-                        VerticalAlignment="Center"
-                        Margin="0,0,0,2"
-                        Text="{x:Bind ViewModel.Master.PercentText, Mode=OneWay, FallbackValue=''}" />
+                    <Border Grid.Column="3" Style="{StaticResource ValueBoxStyle}">
+                        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,1" Text="{x:Bind ViewModel.Master.PercentText, Mode=OneWay, FallbackValue=''}" />
+                    </Border>
                 </Grid>
                 <TextBlock
                     Margin="6,8"
@@ -176,7 +183,7 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="38" />
+                                            <ColumnDefinition Width="48" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
 
@@ -217,12 +224,9 @@
                                             StepFrequency="1"
                                             Value="{x:Bind Volume, Mode=TwoWay}" />
 
-                                        <TextBlock
-                                            Grid.Column="3"
-                                            HorizontalTextAlignment="Right"
-                                            VerticalAlignment="Center"
-                                            Margin="0,0,0,2"
-                                            Text="{x:Bind PercentText, Mode=OneWay}" />
+                                        <Border Grid.Column="3" Style="{StaticResource ValueBoxStyle}">
+                                            <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,1" Text="{x:Bind PercentText, Mode=OneWay}" />
+                                        </Border>
 
                                         <!-- Where it plays: an icon, or (wide mixer) the device's name. Opens the device picker. -->
                                         <Border Grid.Column="4" Margin="4,0,0,0" Width="{x:Bind OutputButtonWidth, Mode=OneWay}" Visibility="{x:Bind OutputColumnVisibility, Mode=OneWay}">
