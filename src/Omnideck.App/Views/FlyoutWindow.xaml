@@ -37,7 +37,7 @@
                     <Setter Property="MinHeight" Value="0" />
                     <Setter Property="MinWidth" Value="0" />
                     <Setter Property="CornerRadius" Value="5" />
-                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="Background" Value="{ThemeResource ControlAltFillColorSecondaryBrush}" />
                     <Setter Property="BorderBrush" Value="{ThemeResource SurfaceStrokeColorDefaultBrush}" />
                     <Setter Property="BorderThickness" Value="1" />
                     <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />

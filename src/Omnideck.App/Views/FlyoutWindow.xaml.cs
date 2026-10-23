@@ -263,6 +263,7 @@ public sealed partial class FlyoutWindow : Window
         double target = ViewModel.IsExpanded ? 1 : 0;
         ViewModel.ExpandProgress = _expandFrom + (target - _expandFrom) * eased;
         UpdateBounds();
+        PaintGrowBackground();
         if (t >= 1)
         {
             CompositionTarget.Rendering -= OnExpandFrame;
@@ -330,6 +331,32 @@ public sealed partial class FlyoutWindow : Window
         SyncBackdropTheme();
         Closed += (_, _) => _acrylic?.Dispose();
     }
+
+    /// <summary>
+    /// The window's own (GDI) surface sits under XAML and is what shows in a strip the window just grew
+    /// by, until XAML draws there a frame later: black unless painted. Painted a grey close to the
+    /// acrylic's right after each resize, the strip all but disappears.
+    /// </summary>
+    private void PaintGrowBackground()
+    {
+        if (!GetClientRect(_hwnd, out var rect)) return;
+        var dc = GetDC(_hwnd);
+        if (dc == IntPtr.Zero) return;
+        var brush = CreateSolidBrush(RootGrid.ActualTheme == ElementTheme.Light ? 0xEEEEEEu : 0x282828u); // 0x00BBGGRR, grey
+        FillRect(dc, ref rect, brush);
+        DeleteObject(brush);
+        ReleaseDC(_hwnd, dc);
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr hwnd, out RECT rect);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern IntPtr GetDC(IntPtr hwnd);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int ReleaseDC(IntPtr hwnd, IntPtr dc);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int FillRect(IntPtr dc, ref RECT rect, IntPtr brush);
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")] private static extern IntPtr CreateSolidBrush(uint color);
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")] private static extern bool DeleteObject(IntPtr obj);
 
     private void SyncBackdropTheme()
     {
