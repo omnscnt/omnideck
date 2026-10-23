@@ -44,6 +44,9 @@ public sealed partial class MixerViewModel : ObservableObject
     private double _expandedOutputWidth = MixerLayout.DefaultExpandedOutputWidth;
     private bool _fullNames;
 
+    /// <summary>Device names with the adapter in brackets, in the output buttons and their lists.</summary>
+    public bool FullNames => _fullNames;
+
     public Visibility OutputsVisibility => OutputsEnabled ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>The master row reaches as far right as the rows below: their output buttons, or their percentages.</summary>
@@ -54,6 +57,11 @@ public sealed partial class MixerViewModel : ObservableObject
     public string ExpandToolTip => IsExpanded ? "Narrow mixer" : "Show each app's output device";
 
     /// <summary>The window's width now (mid-animation too).</summary>
+    /// <summary>The window's width when wide.</summary>
+    public double WideWindowWidth => OutputsEnabled
+        ? MixerLayout.NarrowWidth + _expandedOutputWidth - MixerLayout.IconOutputWidth
+        : MixerLayout.NarrowWidth;
+
     public double WindowWidth => OutputsEnabled
         ? MixerLayout.NarrowWidth + (_expandedOutputWidth - MixerLayout.IconOutputWidth) * ExpandProgress
         : MixerLayout.NarrowWidth;

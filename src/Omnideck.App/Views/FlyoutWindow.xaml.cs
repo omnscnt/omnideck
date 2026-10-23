@@ -20,7 +20,8 @@ namespace Omnideck.Views;
 /// <summary>Borderless acrylic flyout that pops up next to the tray, Windows 11 quick-settings style.</summary>
 public sealed partial class FlyoutWindow : Window
 {
-    private double WidthDip => ViewModel.WindowWidth;
+    // Clipped (see EnterClipped), the window is held at the wide width and a region shows the part in use.
+    private double WidthDip => _clipped ? ViewModel.WideWindowWidth : ViewModel.WindowWidth;
     private const double MarginDip = 12;
     private const double MaxAppsHeightDip = 540;
 
@@ -146,6 +147,7 @@ public sealed partial class FlyoutWindow : Window
             // auto-hidden taskbar nothing covers them) for the frame or two that Hide takes. Show re-cloaks anyway.
             SetCloaked(true);
             AppWindow.Hide();
+            ExitClipped(); // it opens at its own width next time
         });
     }
 
@@ -251,6 +253,7 @@ public sealed partial class FlyoutWindow : Window
         }
         _expandFrom = ViewModel.ExpandProgress;
         _expandClock.Restart();
+        if (_anchor.Edge != TaskbarEdge.Left) EnterClipped(); // a left taskbar: the window grows rightward, its left edge stays
         if (_expanding) return;
         _expanding = true;
         CompositionTarget.Rendering += OnExpandFrame;
@@ -262,14 +265,57 @@ public sealed partial class FlyoutWindow : Window
         double eased = t < 0.5 ? 4 * t * t * t : 1 - Math.Pow(-2 * t + 2, 3) / 2; // ease-in-out cubic
         double target = ViewModel.IsExpanded ? 1 : 0;
         ViewModel.ExpandProgress = _expandFrom + (target - _expandFrom) * eased;
+        if (_clipped) RootGrid.Width = ViewModel.WindowWidth;
         UpdateBounds();
-        PaintGrowBackground();
         if (t >= 1)
         {
             CompositionTarget.Rendering -= OnExpandFrame;
             _expanding = false;
+            if (ViewModel.IsExpanded) ExitClipped(); // the window is wide already: just drop the region
         }
     }
+
+    // ---- clipped: the window stays wide, a region shows the part in use ----------------------------
+
+    // Windows draws a window's last frame from its left edge: when the left edge moves (the mixer grows
+    // leftward from the tray), everything jumps sideways for a frame until XAML catches up, the right edge
+    // most of all. So while widening, the window keeps its wide size and position, and a region cuts it
+    // to the width in use; the content is laid out right-aligned at that width. Only a region's corners
+    // are plain (no system rounding, border or shadow), so it lasts only while needed: until widened
+    // fully, or after narrowing until the mixer closes (narrowing back would move the left edge again).
+    private bool _clipped;
+
+    private void EnterClipped()
+    {
+        if (_clipped) return;
+        _clipped = true;
+        RootGrid.HorizontalAlignment = HorizontalAlignment.Right;
+        RootGrid.Width = ViewModel.WindowWidth;
+        UpdateBounds(); // widening from narrow: the one move of the left edge, with the region already on
+        PaintGrowBackground();
+    }
+
+    private void ExitClipped()
+    {
+        if (!_clipped) return;
+        _clipped = false;
+        SetWindowRgn(_hwnd, IntPtr.Zero, true);
+        RootGrid.ClearValue(FrameworkElement.WidthProperty);
+        RootGrid.HorizontalAlignment = HorizontalAlignment.Stretch;
+        if (_isOpen) UpdateBounds();
+    }
+
+    /// <summary>The region: the right part of the window, as wide as the mixer is now, with rounded corners.</summary>
+    private void ClipTo(int width, int height, double scale, int nonClient)
+    {
+        int visible = Math.Min(width, (int)Math.Round(ViewModel.WindowWidth * scale) + nonClient);
+        int corner = (int)Math.Round(16 * scale); // the ellipse's size: an 8 DIP radius, like the system's
+        var region = CreateRoundRectRgn(width - visible, 0, width + 1, height + 1, corner, corner);
+        SetWindowRgn(_hwnd, region, true); // the window owns the region from here
+    }
+
+    [System.Runtime.InteropServices.DllImport("gdi32.dll")] private static extern IntPtr CreateRoundRectRgn(int x1, int y1, int x2, int y2, int w, int h);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern int SetWindowRgn(IntPtr hwnd, IntPtr region, bool redraw);
 
     private bool _cloaked;
     private int _cloakedFrames;
@@ -384,7 +430,7 @@ public sealed partial class FlyoutWindow : Window
         double workHeightDip = anchor.WorkArea.Height / scale;
 
         AppsScroller.MaxHeight = Math.Max(120, Math.Min(MaxAppsHeightDip, workHeightDip - 260));
-        Card.Measure(new Size(WidthDip, double.PositiveInfinity));
+        Card.Measure(new Size(ViewModel.WindowWidth, double.PositiveInfinity));
         double heightDip = Math.Min(Card.DesiredSize.Height, workHeightDip - 2 * MarginDip);
 
         // Size the client area, not the frame: the border-only presenter still reserves a few
@@ -402,6 +448,7 @@ public sealed partial class FlyoutWindow : Window
         // Mid-slide the frame callback owns the position; only take the new size.
         if (_sliding) AppWindow.Resize(new SizeInt32(width, height));
         else AppWindow.MoveAndResize(_target);
+        if (_clipped) ClipTo(width, height, scale, frame.Width - client.Width);
     }
 
     // ---- events ------------------------------------------------------------------------------
@@ -474,7 +521,9 @@ public sealed partial class FlyoutWindow : Window
     /// </summary>
     private void ShowDevicePicker(FrameworkElement target, IReadOnlyList<(string Name, string? Id, bool IsCurrent)> choices, Action<string?> pick)
     {
-        var list = new StackPanel { Width = Math.Max(target.ActualWidth, MinPickerWidth) - 8 }; // minus the presenter's padding and border
+        // Full names (a setting): as wide as they need, at least the button; short ones fit the button.
+        double width = Math.Max(target.ActualWidth, MinPickerWidth) - 8; // minus the presenter's padding and border
+        var list = ViewModel.FullNames ? new StackPanel { MinWidth = width } : new StackPanel { Width = width };
         var flyout = new Flyout
         {
             Content = list,
@@ -487,7 +536,7 @@ public sealed partial class FlyoutWindow : Window
         var shortNames = choices.Select(c => MixerLayout.ShortName(c.Name)).ToList();
         foreach (var ((fullName, id, isCurrent), i) in choices.Select((c, i) => (c, i)))
         {
-            string name = shortNames.Count(n => n == shortNames[i]) > 1 ? fullName : shortNames[i];
+            string name = ViewModel.FullNames || shortNames.Count(n => n == shortNames[i]) > 1 ? fullName : shortNames[i];
             var row = new Grid { ColumnSpacing = 6 };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
