@@ -161,10 +161,35 @@ public sealed partial class FlyoutWindow : Window
     /// </summary>
     private void FollowTaskbar()
     {
+        if (_followingFrames) return; // the frame callback has it
         var anchor = TaskbarPlacement.Refresh(_anchor);
         if (anchor == _anchor) return;
         _anchor = anchor;
         UpdateBounds();
+        // It's moving: follow on every composition frame (the timer's 15 ms is fewer frames than the
+        // screen shows), until it has sat still for a moment.
+        _followingFrames = true;
+        _stillSince.Restart();
+        CompositionTarget.Rendering += OnFollowFrame;
+    }
+
+    private bool _followingFrames;
+    private readonly System.Diagnostics.Stopwatch _stillSince = new();
+
+    private void OnFollowFrame(object? sender, object? e)
+    {
+        var anchor = TaskbarPlacement.Refresh(_anchor);
+        if (anchor != _anchor && _isOpen)
+        {
+            _anchor = anchor;
+            UpdateBounds();
+            _stillSince.Restart();
+        }
+        else if (_stillSince.ElapsedMilliseconds > 250 || !_isOpen)
+        {
+            CompositionTarget.Rendering -= OnFollowFrame;
+            _followingFrames = false;
+        }
     }
 
     // ---- window slide ------------------------------------------------------------------------
@@ -284,12 +309,16 @@ public sealed partial class FlyoutWindow : Window
     // are plain (no system rounding, border or shadow), so it lasts only while needed: until widened
     // fully, or after narrowing until the mixer closes (narrowing back would move the left edge again).
     private bool _clipped;
+    private (int, int, int, int, int) _regionShape; // the region in place, to set it only when it changes
 
     private void EnterClipped()
     {
         if (_clipped) return;
         _clipped = true;
         SetSystemBorder(false);
+        // Windows' border colour, so the outline doesn't change when the region takes over.
+        ClipEdge.BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(RootGrid.ActualTheme == ElementTheme.Light
+            ? Windows.UI.Color.FromArgb(255, 0xC9, 0xC9, 0xC9) : Windows.UI.Color.FromArgb(255, 0x40, 0x40, 0x40));
         ClipEdge.Visibility = Visibility.Visible;
         RootGrid.HorizontalAlignment = HorizontalAlignment.Right;
         RootGrid.Width = ViewModel.WindowWidth;
@@ -302,6 +331,7 @@ public sealed partial class FlyoutWindow : Window
         if (!_clipped) return;
         _clipped = false;
         SetWindowRgn(_hwnd, IntPtr.Zero, true);
+        _regionShape = default;
         SetSystemBorder(true);
         ClipEdge.Visibility = Visibility.Collapsed;
         RootGrid.ClearValue(FrameworkElement.WidthProperty);
@@ -319,6 +349,10 @@ public sealed partial class FlyoutWindow : Window
         int left = origin.X - window.Left, top = origin.Y - window.Top;
         int visible = Math.Min(client.Right, (int)Math.Round(ViewModel.WindowWidth * scale));
         int corner = (int)Math.Round(16 * scale); // the ellipse's size: an 8 DIP radius, like the system's
+        // Moving (following the taskbar) leaves it as it is: a region is relative to the window.
+        var shape = (left + client.Right - visible, top, left + client.Right + 1, top + client.Bottom + 1, corner);
+        if (shape == _regionShape) return;
+        _regionShape = shape;
         var region = CreateRoundRectRgn(left + client.Right - visible, top, left + client.Right + 1, top + client.Bottom + 1, corner, corner);
         SetWindowRgn(_hwnd, region, true); // the window owns the region from here
     }
