@@ -98,7 +98,7 @@ public sealed partial class HotkeyEditor : UserControl
         ReadFields();
 
         RecordText.Text = _recording
-            ? "Press a key combination…  (Esc to cancel)"
+            ? "Hold the keys together, then release…  (Esc to cancel)"
             : _draft.Keys.IsEmpty ? "Click to record a shortcut" : _draft.Keys.ToString();
         RecordIcon.Glyph = _recording ? "" : ""; // record dot / keyboard
 

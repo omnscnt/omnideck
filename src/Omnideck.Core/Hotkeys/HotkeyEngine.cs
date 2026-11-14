@@ -20,10 +20,12 @@ public sealed class HotkeyEngine : IDisposable
     private uint _threadId;
     private IntPtr _hook;
 
-    private Dictionary<KeyChord, ChordState> _chords = [];
-    private readonly Dictionary<int, ChordState> _down = []; // vk → chord whose key is currently held
+    private (KeyChord Keys, ChordState State)[] _chords = [];
+    private readonly HashSet<int> _pressed = [];
+    private readonly HashSet<int> _swallowed = [];
+    private readonly List<(KeyChord Keys, ChordState State)> _active = [];
+    private readonly HashSet<int> _recordedKeys = [];
     private Action<KeyChord>? _recorder;
-    private int _swallowKeyUp;
     private bool _disposed;
 
     /// <summary>A binding fired. Raised on a thread-pool thread (repeatedly for held, repeating bindings).</summary>
@@ -53,30 +55,43 @@ public sealed class HotkeyEngine : IDisposable
 
     public void SetBindings(IEnumerable<HotkeyBinding> bindings)
     {
-        var map = new Dictionary<KeyChord, ChordState>();
-        foreach (var group in bindings.Where(b => b.Enabled && !b.Keys.IsEmpty).GroupBy(b => b.Keys))
-            map[group.Key] = new ChordState(this, group.ToList());
+        var chords = bindings.Where(b => b.Enabled && !b.Keys.IsEmpty)
+            .GroupBy(b => b.Keys)
+            .OrderByDescending(group => group.Key.KeyCount)
+            .ToArray();
+        var states = chords
+            .Select(group => (group.Key, new ChordState(this, group.ToList(),
+                chords.Any(other => other.Key.Extends(group.Key)))))
+            .ToArray();
 
         lock (_gate)
         {
-            foreach (var state in _chords.Values) state.Reset();
-            _chords = map;
-            _down.Clear();
+            foreach (var (_, state) in _chords) state.Reset();
+            _chords = states;
+            _active.Clear();
         }
     }
 
     /// <summary>
-    /// Captures the next key combination instead of firing bindings; the keystroke is swallowed.
+    /// Captures keys held together until the first participating key is released.
     /// Esc on its own cancels (callback gets an empty chord).
     /// </summary>
     public void Record(Action<KeyChord> onRecorded)
     {
-        lock (_gate) _recorder = onRecorded;
+        lock (_gate)
+        {
+            _recordedKeys.Clear();
+            _recorder = onRecorded;
+        }
     }
 
     public void CancelRecord()
     {
-        lock (_gate) _recorder = null;
+        lock (_gate)
+        {
+            _recordedKeys.Clear();
+            _recorder = null;
+        }
     }
 
     // ---- hook ----------------------------------------------------------------------------------
@@ -84,6 +99,11 @@ public sealed class HotkeyEngine : IDisposable
     private void HookThread()
     {
         _threadId = GetCurrentThreadId();
+        // Seed modifiers already held when the hook starts. After that, track hook events directly.
+        foreach (int vk in new[] { 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x5B, 0x5C })
+        {
+            if ((GetAsyncKeyState(vk) & 0x8000) != 0) _pressed.Add(vk);
+        }
         _hook = SetWindowsHookEx(13 /* WH_KEYBOARD_LL */, _proc, GetModuleHandle(null), 0);
         _ready.Set();
         while (GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
@@ -103,7 +123,7 @@ public sealed class HotkeyEngine : IDisposable
             bool isUp = message is 0x0101 or 0x0105;   // WM_KEYUP, WM_SYSKEYUP
             int vk = Marshal.ReadInt32(lParam); // KBDLLHOOKSTRUCT.vkCode
             if (isDown || isUp) WatchSystemKeys(vk, isDown);
-            if ((isDown || isUp) && !KeyChord.IsModifierKey(vk) && Handle(vk, isDown))
+            if ((isDown || isUp) && Handle(vk, isDown))
                 return 1; // swallow
         }
         return CallNextHookEx(_hook, code, wParam, lParam);
@@ -128,50 +148,78 @@ public sealed class HotkeyEngine : IDisposable
     {
         lock (_gate)
         {
-            if (_recorder != null && isDown)
+            if (!isDown)
             {
-                var recorder = _recorder;
-                _recorder = null;
-                _swallowKeyUp = vk;
+                if (_recorder != null && _recordedKeys.Count > 0 &&
+                    (_recordedKeys.Contains(vk) || KeyChord.ModifierFor(vk) != KeyModifiers.None))
+                {
+                    var keys = _recordedKeys.Where(key => KeyChord.ModifierFor(key) == KeyModifiers.None).ToArray();
+                    FinishRecording(new KeyChord(CurrentModifiers(), 0, keys));
+                }
+
+                _pressed.Remove(vk);
                 var mods = CurrentModifiers();
-                var chord = vk == 0x1B && mods == KeyModifiers.None ? default : new KeyChord(mods, vk);
-                ThreadPool.QueueUserWorkItem(_ => recorder(chord));
-                return true;
+                for (int i = _active.Count - 1; i >= 0; i--)
+                {
+                    var (keys, state) = _active[i];
+                    if ((mods & keys.Modifiers) == keys.Modifiers && keys.KeysAreDown(_pressed)) continue;
+                    _active.RemoveAt(i);
+                    state.OnUp();
+                }
+                return _swallowed.Remove(vk);
             }
-            if (!isDown && vk == _swallowKeyUp)
+
+            // Every down is tracked, including unbound keys. Auto-repeat never changes a match.
+            if (!_pressed.Add(vk)) return _swallowed.Contains(vk);
+            var modifier = KeyChord.ModifierFor(vk);
+            var currentModifiers = CurrentModifiers();
+            if (_recorder != null)
             {
-                _swallowKeyUp = 0;
+                _swallowed.Add(vk);
+                if (vk == 0x1B && currentModifiers == KeyModifiers.None && _recordedKeys.Count == 0)
+                    FinishRecording(default);
+                else
+                    _recordedKeys.Add(vk);
                 return true;
             }
 
-            if (isDown)
+            if (Paused) return false;
+            foreach (var (keys, state) in _chords)
             {
-                // Auto-repeat of a key we're already tracking: hold logic runs on timers, not on repeats.
-                if (_down.TryGetValue(vk, out var held)) return held.Block;
-                if (Paused || !_chords.TryGetValue(new KeyChord(CurrentModifiers(), vk), out var state)) return false;
-                _down[vk] = state;
+                if (keys.Modifiers != currentModifiers || !keys.KeysAreDown(_pressed)) continue;
+                if (modifier == KeyModifiers.None ? !keys.ContainsKey(vk) : !keys.Modifiers.HasFlag(modifier)) continue;
+                if (keys.KeyCount == 0 && _pressed.Any(key => KeyChord.ModifierFor(key) == KeyModifiers.None)) continue;
+                if (state.IsDown) return false;
+
+                for (int i = _active.Count - 1; i >= 0; i--)
+                {
+                    var (shorter, pending) = _active[i];
+                    if (!keys.Extends(shorter)) continue;
+                    _active.RemoveAt(i);
+                    pending.Reset();
+                }
+                _active.Add((keys, state));
                 state.OnDown();
+                if (state.Block) _swallowed.Add(vk);
                 return state.Block;
             }
 
-            // Key-up is matched by key alone: modifiers are often released first.
-            if (_down.Remove(vk, out var released))
-            {
-                released.OnUp();
-                return released.Block;
-            }
             return false;
         }
     }
 
-    private static KeyModifiers CurrentModifiers()
+    private void FinishRecording(KeyChord chord)
     {
-        static bool Down(int vk) => (GetAsyncKeyState(vk) & 0x8000) != 0;
+        var recorder = _recorder!;
+        _recorder = null;
+        _recordedKeys.Clear();
+        ThreadPool.QueueUserWorkItem(_ => recorder(chord));
+    }
+
+    private KeyModifiers CurrentModifiers()
+    {
         var mods = KeyModifiers.None;
-        if (Down(0x11)) mods |= KeyModifiers.Ctrl;
-        if (Down(0x12)) mods |= KeyModifiers.Alt;
-        if (Down(0x10)) mods |= KeyModifiers.Shift;
-        if (Down(0x5B) || Down(0x5C)) mods |= KeyModifiers.Win;
+        foreach (int vk in _pressed) mods |= KeyChord.ModifierFor(vk);
         return mods;
     }
 
@@ -184,7 +232,7 @@ public sealed class HotkeyEngine : IDisposable
         _disposed = true;
         lock (_gate)
         {
-            foreach (var state in _chords.Values) state.Reset();
+            foreach (var (_, state) in _chords) state.Reset();
         }
         PostThreadMessage(_threadId, 0x0012 /* WM_QUIT */, IntPtr.Zero, IntPtr.Zero);
     }
@@ -205,6 +253,7 @@ public sealed class HotkeyEngine : IDisposable
         private readonly int _maxTap;
         private readonly HotkeyBinding? _holdBinding; // what a long press fires, if anything
         private readonly bool _waitForHold;           // a Hold binding exists: a press can't fire until key-up
+        private readonly bool _canExtend;
         private int _taps;
         private bool _isDown;
         private bool _holdActive;
@@ -212,10 +261,12 @@ public sealed class HotkeyEngine : IDisposable
         private Timer? _holdTimer;
 
         public bool Block { get; }
+        public bool IsDown => _isDown;
 
-        public ChordState(HotkeyEngine engine, List<HotkeyBinding> bindings)
+        public ChordState(HotkeyEngine engine, List<HotkeyBinding> bindings, bool canExtend)
         {
             _engine = engine;
+            _canExtend = canExtend;
             foreach (var b in bindings) _byTrigger.TryAdd(b.Trigger, b); // first binding per trigger wins
             _maxTap = _byTrigger.Keys.Where(t => t != TriggerKind.Hold).Select(TapCount).DefaultIfEmpty(0).Max();
             _waitForHold = _byTrigger.TryGetValue(TriggerKind.Hold, out var hold);
@@ -237,7 +288,7 @@ public sealed class HotkeyEngine : IDisposable
             DisposeTimer(ref _tapTimer);
 
             bool firstPress = _taps == 1;
-            if (!_waitForHold && _taps >= _maxTap) FireTaps(); // nothing longer is bound: no need to wait
+            if (!_canExtend && !_waitForHold && _taps >= _maxTap) FireTaps();
             if (_holdBinding != null && firstPress)
             {
                 var repeat = _holdBinding.Repeats ? HoldRepeat : Timeout.InfiniteTimeSpan;
@@ -318,6 +369,7 @@ public sealed class HotkeyEngine : IDisposable
         public uint time;
         public int ptX;
         public int ptY;
+        public uint lPrivate;
     }
 
     [DllImport("user32.dll", SetLastError = true)]
