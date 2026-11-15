@@ -1235,11 +1235,13 @@
                                         TextWrapping="Wrap"
                                         Text="Approve once to start with administrator rights on future launches, including sign-in." />
                                 </StackPanel>
-                                <ToggleSwitch
-                                    x:Name="RunAsAdministratorSwitch"
-                                    MinWidth="0"
-                                    Grid.Column="1" HorizontalAlignment="Right"
-                                    AutomationProperties.Name="Always run as administrator" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                    <Button x:Name="RestartForAdministratorTaskButton" Content="Restart" Click="OnRestartForAdministratorTask" />
+                                    <ToggleSwitch
+                                        x:Name="RunAsAdministratorSwitch"
+                                        MinWidth="0"
+                                        AutomationProperties.Name="Always run as administrator" />
+                                </StackPanel>
                             </Grid>
                         </Border>
 

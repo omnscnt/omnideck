@@ -8,7 +8,7 @@
     <AssemblyName>omnideck</AssemblyName>
     <AssemblyTitle>omnideck.</AssemblyTitle>
     <Product>omnideck.</Product>
-    <Version>0.6.2</Version>
+    <Version>0.6.3</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\omnideck.ico</ApplicationIcon>
     <StartupHookSupport>false</StartupHookSupport>

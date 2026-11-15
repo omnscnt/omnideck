@@ -19,10 +19,6 @@ $launcherOut = Join-Path $root 'artifacts\launcher'
 dotnet build $launcher -c Release -p:Version=$version -o $launcherOut -nologo -v q
 if ($LASTEXITCODE -ne 0) { throw "launcher build failed" }
 Copy-Item (Join-Path $launcherOut 'omnideck.exe') $out
-# Transition from the omnisound name: the update script of 0.3.x checks for and installs omnisound.exe,
-# so the same launcher also ships under that name; the app renames it to omnideck.exe on first start
-# (InstallLayout.RenameLegacyLauncher). Newer update scripts ignore it.
-Copy-Item (Join-Path $launcherOut 'omnideck.exe') (Join-Path $out 'omnisound.exe')
 
 $zip = "$out.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }

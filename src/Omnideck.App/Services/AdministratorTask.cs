@@ -14,6 +14,7 @@ internal static class AdministratorTask
     private const int TaskLogonInteractiveToken = 3;
     private const int TaskRunLevelHighest = 1;
     private const int TaskActionExec = 0;
+    private static readonly SecurityIdentifier Administrators = new(WellKnownSidType.BuiltinAdministratorsSid, null);
 
     private static string TaskName(string sid) => $"Omnideck Administrator ({sid})";
 
@@ -39,17 +40,19 @@ internal static class AdministratorTask
 
     private static bool WithCurrentTask(Func<dynamic, bool> action)
     {
+        if (!IsInProgramFiles) return false;
+
         try
         {
             using var identity = WindowsIdentity.GetCurrent();
             dynamic folder = GetRootFolder();
             return action(folder.GetTask(TaskName(identity.User!.Value)));
         }
-        catch (COMException ex) when (ex.HResult == FileNotFound)
+        catch (Exception ex) when (ex.HResult == FileNotFound)
         {
             return false;
         }
-        catch (COMException ex)
+        catch (Exception ex) when (ex is COMException or UnauthorizedAccessException)
         {
             CrashLog.Write("administrator task", ex);
             return false;
@@ -69,11 +72,11 @@ internal static class AdministratorTask
         if (!enabled)
         {
             try { folder.DeleteTask(name, 0); }
-            catch (COMException ex) when (ex.HResult == FileNotFound) { }
+            catch (Exception ex) when (ex.HResult == FileNotFound) { }
             return;
         }
 
-        VerifyInstallation();
+        SecureInstallation(identity.User!);
         dynamic definition = scheduler.NewTask(0);
         definition.RegistrationInfo.Description = "Starts Omnideck with administrator rights for global hotkeys.";
         definition.Principal.UserId = sid;
@@ -98,53 +101,97 @@ internal static class AdministratorTask
 
     private static string ProgramFiles => Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
 
-    private static void VerifyInstallation()
+    private static void SecureInstallation(SecurityIdentifier user)
     {
         if (!IsInProgramFiles) throw new UnauthorizedAccessException("Install Omnideck in Program Files first.");
 
-        // Every executable and DLL must be protected, as must the directories that can replace them.
         var root = new DirectoryInfo(InstallLayout.Root);
-        for (DirectoryInfo? parent = root; parent != null; parent = parent.Parent)
+        var parents = new Stack<DirectoryInfo>();
+        for (DirectoryInfo? parent = root.Parent; parent != null; parent = parent.Parent)
         {
-            VerifyPermissions(parent, parent.GetAccessControl());
+            parents.Push(parent);
             if (string.Equals(parent.FullName, ProgramFiles, StringComparison.OrdinalIgnoreCase)) break;
         }
-        VerifyContents(root);
+        foreach (var parent in parents) SecureEntry(parent, user: null);
+
+        SecureTree(root, user);
     }
 
-    private static void VerifyContents(DirectoryInfo directory)
+    internal static void SecureUpdatePayload(string path)
     {
-        foreach (FileSystemInfo entry in directory.EnumerateFileSystemInfos())
-        {
-            if (entry is DirectoryInfo child)
-            {
-                VerifyPermissions(child, child.GetAccessControl());
-                VerifyContents(child);
-            }
-            else if (entry is FileInfo file)
-            {
-                VerifyPermissions(file, file.GetAccessControl());
-            }
-        }
+        using var identity = WindowsIdentity.GetCurrent();
+        SecureTree(new DirectoryInfo(path), identity.User!);
     }
 
-    private static void VerifyPermissions(FileSystemInfo entry, FileSystemSecurity security)
+    private static void SecureTree(DirectoryInfo directory, SecurityIdentifier user)
+    {
+        SecureEntry(directory, user);
+        foreach (FileSystemInfo entry in directory.EnumerateFileSystemInfos())
+            if (entry is DirectoryInfo child) SecureTree(child, user);
+            else SecureEntry(entry, user);
+    }
+
+    private static void SecureEntry(FileSystemInfo entry, SecurityIdentifier? user)
     {
         const FileSystemRights genericWriteOrAll = (FileSystemRights)0x50000000;
         const FileSystemRights write = genericWriteOrAll | FileSystemRights.Write | FileSystemRights.Delete |
             FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.ChangePermissions | FileSystemRights.TakeOwnership;
 
-        if ((entry.Attributes & FileAttributes.ReparsePoint) != 0 ||
-            security.GetOwner(typeof(SecurityIdentifier)) is not SecurityIdentifier owner || !IsTrusted(owner))
-            throw new UnauthorizedAccessException($"Unprotected installation path: {entry.FullName}");
+        entry.Refresh();
+        if ((entry.Attributes & FileAttributes.ReparsePoint) != 0) throw Unprotected(entry);
+        FileSystemSecurity security = entry is DirectoryInfo directory ? directory.GetAccessControl() : ((FileInfo)entry).GetAccessControl();
+        var owner = (SecurityIdentifier)security.GetOwner(typeof(SecurityIdentifier))!;
+        bool changeOwner = user != null && owner.Equals(user);
+        if (!changeOwner && !IsTrusted(owner)) throw Unprotected(entry);
 
+        bool removeCreatorGrant = false;
         foreach (FileSystemAccessRule rule in security.GetAccessRules(true, true, typeof(SecurityIdentifier)))
         {
-            if (rule.AccessControlType == AccessControlType.Allow && (rule.PropagationFlags & PropagationFlags.InheritOnly) == 0 &&
-                (rule.FileSystemRights & write) != 0 && !IsTrusted((SecurityIdentifier)rule.IdentityReference))
-                throw new UnauthorizedAccessException($"Unprotected installation path: {entry.FullName}");
+            if (rule.AccessControlType != AccessControlType.Allow || (rule.PropagationFlags & PropagationFlags.InheritOnly) != 0 ||
+                (rule.FileSystemRights & write) == 0 || IsTrusted((SecurityIdentifier)rule.IdentityReference)) continue;
+
+            // Explorer can keep the original owner on copied files. Program Files grants that owner Full Control through CREATOR OWNER.
+            if (!changeOwner || !rule.IsInherited || !IsCreatorGrant(rule, owner)) throw Unprotected(entry);
+            removeCreatorGrant = true;
         }
+
+        if (!changeOwner) return;
+        if (removeCreatorGrant)
+        {
+            // RemoveAccessRuleSpecific cannot remove an inherited ACE. Preserve the other entries as-is.
+            var descriptor = new RawSecurityDescriptor(security.GetSecurityDescriptorBinaryForm(), 0);
+            var acl = descriptor.DiscretionaryAcl!;
+            bool removed = false;
+            for (int i = acl.Count - 1; i >= 0; i--)
+            {
+                if (acl[i] is CommonAce ace && ace.AceFlags == AceFlags.Inherited &&
+                    ace.AceQualifier == AceQualifier.AccessAllowed && ace.SecurityIdentifier.Equals(owner) &&
+                    ace.AccessMask == (int)FileSystemRights.FullControl)
+                {
+                    acl.RemoveAce(i);
+                    removed = true;
+                }
+            }
+            if (!removed) throw Unprotected(entry);
+            descriptor.SetFlags(descriptor.ControlFlags | ControlFlags.DiscretionaryAclProtected);
+            byte[] buffer = new byte[descriptor.BinaryLength];
+            descriptor.GetBinaryForm(buffer, 0);
+            security.SetSecurityDescriptorBinaryForm(buffer, AccessControlSections.Access);
+        }
+
+        security.SetOwner(Administrators);
+        if (entry is DirectoryInfo folder) folder.SetAccessControl((DirectorySecurity)security);
+        else ((FileInfo)entry).SetAccessControl((FileSecurity)security);
+        SecureEntry(entry, user: null);
     }
+
+    private static bool IsCreatorGrant(FileSystemAccessRule rule, SecurityIdentifier owner) =>
+        rule.IdentityReference.Equals(owner) && rule.AccessControlType == AccessControlType.Allow &&
+        rule.FileSystemRights == FileSystemRights.FullControl && rule.InheritanceFlags == InheritanceFlags.None &&
+        rule.PropagationFlags == PropagationFlags.None;
+
+    private static UnauthorizedAccessException Unprotected(FileSystemInfo entry) =>
+        new($"Unprotected installation path: {entry.FullName}");
 
     private static bool IsTrusted(SecurityIdentifier sid) => sid.IsWellKnown(WellKnownSidType.LocalSystemSid) ||
         sid.IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid) ||

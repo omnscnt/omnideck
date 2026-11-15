@@ -45,6 +45,7 @@ public sealed partial class SettingsWindow : Window
         AutoStartSwitch.IsOn = AutoStart.IsEnabled;
         bool canConfigureAdministratorTask = AdministratorTask.IsInProgramFiles;
         RunAsAdministratorSwitch.IsEnabled = canConfigureAdministratorTask;
+        RestartForAdministratorTaskButton.IsEnabled = canConfigureAdministratorTask;
         if (canConfigureAdministratorTask)
         {
             RunAsAdministratorSwitch.IsOn = AdministratorTask.IsEnabled;
@@ -776,11 +777,12 @@ public sealed partial class SettingsWindow : Window
     {
         bool enabled = RunAsAdministratorSwitch.IsOn;
         RunAsAdministratorSwitch.IsEnabled = false;
+        RestartForAdministratorTaskButton.IsEnabled = false;
         try
         {
             if (await App.Instance.ConfigureAdministratorTaskAsync(enabled))
             {
-                AdministratorTaskStatus.Text = "Applies the next time Omnideck starts.";
+                AdministratorTaskStatus.Text = "Restart Omnideck to apply this setting.";
                 return;
             }
 
@@ -792,7 +794,14 @@ public sealed partial class SettingsWindow : Window
         finally
         {
             RunAsAdministratorSwitch.IsEnabled = true;
+            RestartForAdministratorTaskButton.IsEnabled = true;
         }
+    }
+
+    private void OnRestartForAdministratorTask(object sender, RoutedEventArgs e)
+    {
+        if (!App.Instance.Restart(RunAsAdministratorSwitch.IsOn))
+            AdministratorTaskStatus.Text = "Could not restart Omnideck.";
     }
 
     private void OnLogVolumeToggled(object sender, RoutedEventArgs e)

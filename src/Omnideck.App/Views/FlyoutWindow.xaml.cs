@@ -28,6 +28,7 @@ public sealed partial class FlyoutWindow : Window
     private bool _isOpen;
     private DateTime _lastHidden = DateTime.MinValue;
     private TaskbarAnchor _anchor;
+    private EventHandler<object>? _prewarmFrame;
 
     public MixerViewModel ViewModel { get; }
 
@@ -132,16 +133,27 @@ public sealed partial class FlyoutWindow : Window
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
         int frames = 0;
-        void OnFrame(object? sender, object e)
+        _prewarmFrame = (_, _) =>
         {
             if (++frames < 10 || clock.ElapsedMilliseconds < 300) return;
-            CompositionTarget.Rendering -= OnFrame;
+            CompositionTarget.Rendering -= _prewarmFrame;
+            _prewarmFrame = null;
             if (_isOpen) return; // the user opened it meanwhile; Show() owns the cloak now
             _panel.HideQuietly();
             AppWindow.Hide();
             SetCloaked(false);
-        }
-        CompositionTarget.Rendering += OnFrame;
+        };
+        CompositionTarget.Rendering += _prewarmFrame;
+    }
+
+    internal void StopAnimations()
+    {
+        _taskbarWatch.Stop();
+        CompositionTarget.Rendering -= OnSlideFrame;
+        CompositionTarget.Rendering -= OnFollowFrame;
+        CompositionTarget.Rendering -= OnExpandFrame;
+        if (_prewarmFrame != null) CompositionTarget.Rendering -= _prewarmFrame;
+        _prewarmFrame = null;
     }
 
     public void Hide()
