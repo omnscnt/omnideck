@@ -10,7 +10,7 @@ public sealed record UpdateInfo(Version Version, string Tag, string DownloadUrl,
 
 /// <summary>
 /// Updates from the GitHub releases of omnscnt/omnideck: the latest release's win-x64 zip is downloaded,
-/// unpacked to %TEMP%, and a small PowerShell script copies it over the install folder once this process
+/// unpacked to a staging folder, and a small PowerShell script copies it over the install folder once this process
 /// has exited, then starts the new version. Settings live elsewhere (%LOCALAPPDATA%) and are untouched.
 /// </summary>
 public static class Updater
@@ -78,10 +78,25 @@ public static class Updater
     /// </summary>
     public static async Task PrepareAsync(UpdateInfo update, IProgress<double>? progress, CancellationToken cancel = default)
     {
-        string work = Path.Combine(Path.GetTempPath(), "omnideck-update");
-        if (Directory.Exists(work)) Directory.Delete(work, recursive: true);
+        // Keep the script and replacement binaries in the protected install when an administrator task can run them.
+        string staging = AdministratorTask.IsInProgramFiles ? InstallLayout.Root : Path.GetTempPath();
+        string work = Path.Combine(staging, $"omnideck-update-{Guid.NewGuid():N}");
         Directory.CreateDirectory(work);
+        try
+        {
+            await StageUpdateAsync(update, work, progress, cancel);
+        }
+        catch
+        {
+            try { Directory.Delete(work, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            throw;
+        }
+    }
 
+    private static async Task StageUpdateAsync(UpdateInfo update, string work, IProgress<double>? progress, CancellationToken cancel)
+    {
         string zip = Path.Combine(work, "update.zip");
         using (var response = await Http.GetAsync(update.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancel))
         {
@@ -111,7 +126,8 @@ public static class Updater
         string target = InstallLayout.Root;
         Process.Start(new ProcessStartInfo
         {
-            FileName = "powershell.exe",
+            FileName = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"),
+            WorkingDirectory = InstallLayout.Root,
             Arguments = $"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{script}\" " +
                         $"-ProcessId {Environment.ProcessId} -Source \"{root}\" -Target \"{target}\" -Work \"{work}\"",
             UseShellExecute = false,
@@ -127,11 +143,11 @@ public static class Updater
         param([int]$ProcessId, [string]$Source, [string]$Target, [string]$Work)
         try { Wait-Process -Id $ProcessId -Timeout 60 -ErrorAction Stop } catch { }
         if (Test-Path -LiteralPath (Join-Path $Source 'app')) {
-            robocopy (Join-Path $Source 'app') (Join-Path $Target 'app') /MIR /R:20 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+            & (Join-Path ([Environment]::SystemDirectory) 'robocopy.exe') (Join-Path $Source 'app') (Join-Path $Target 'app') /MIR /R:20 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
             Copy-Item -LiteralPath (Join-Path $Source 'omnideck.exe') -Destination (Join-Path $Target 'omnideck.exe') -Force
         }
         else {
-            robocopy "$Source" "$Target" /E /R:20 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+            & (Join-Path ([Environment]::SystemDirectory) 'robocopy.exe') "$Source" "$Target" /E /R:20 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
         }
         Start-Process -FilePath (Join-Path $Target 'omnideck.exe') -ArgumentList '--updated'
         Start-Sleep -Seconds 3

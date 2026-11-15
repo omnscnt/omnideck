@@ -1,3 +1,6 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Security.Principal;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Omnideck.Core;
@@ -14,6 +17,8 @@ namespace Omnideck;
 
 public partial class App : Application
 {
+    private const string ElevatedRestartArgument = "--elevated-restart";
+
     private Mutex? _singleInstance;
     private AudioService? _audio;
     private HotkeyEngine? _hotkeys;
@@ -50,30 +55,82 @@ public partial class App : Application
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
-        _singleInstance = new Mutex(true, @"Local\Omnideck.SingleInstance", out bool isFirst);
+        var cmdArgs = Environment.GetCommandLineArgs();
+        if (cmdArgs.Length == 4 && cmdArgs[1] == AdministratorTask.ConfigureArgument && bool.TryParse(cmdArgs[2], out bool enabled))
+        {
+            try { AdministratorTask.Configure(enabled, cmdArgs[3]); }
+            catch (Exception ex)
+            {
+                CrashLog.Write("configure administrator task", ex);
+                Environment.ExitCode = 1;
+            }
+            Exit();
+            return;
+        }
+
+        bool fromAutostart = cmdArgs.Contains(AutoStart.LaunchArgument) || cmdArgs.Contains(Updater.UpdatedArgument);
+        bool scheduledLaunch = cmdArgs.Contains(AdministratorTask.LaunchArgument);
+        bool elevatedRestart = cmdArgs.Contains(ElevatedRestartArgument);
         var showSignal = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\Omnideck.ShowFlyout");
         var menuSignal = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\Omnideck.ShowMenu");
         var settingsSignal = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\Omnideck.ShowSettings");
-        var cmdArgs = Environment.GetCommandLineArgs();
+        using var taskReady = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\Omnideck.AdministratorTaskReady");
+        EventWaitHandle activationSignal = cmdArgs.Contains("--menu") ? menuSignal : cmdArgs.Contains("--settings") ? settingsSignal : showSignal;
+        _singleInstance = new Mutex(true, @"Local\Omnideck.SingleInstance", out bool isFirst);
+        if (!isFirst && (elevatedRestart || scheduledLaunch))
+        {
+            // The original instance still owns the mutex while it requests elevation.
+            isFirst = TakeInstanceMutex(TimeSpan.FromSeconds(10));
+
+            if (!isFirst)
+            {
+                CrashLog.Write("elevated restart", new TimeoutException("The previous instance did not exit."));
+                Exit();
+                return;
+            }
+        }
+
         if (!isFirst)
         {
             // Launching the exe again pops the running instance's mixer (--menu: tray menu, --settings: settings).
             if (!cmdArgs.Contains(AutoStart.LaunchArgument))
             {
                 AllowSetForegroundWindow(-1); // Hand our foreground right to the running instance.
-                (cmdArgs.Contains("--menu") ? menuSignal : cmdArgs.Contains("--settings") ? settingsSignal : showSignal).Set();
+                activationSignal.Set();
             }
             Exit();
             return;
         }
 
+        using var identity = WindowsIdentity.GetCurrent();
+        bool isAdministrator = new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
+        bool scheduledLaunchFailed = false;
+        if (scheduledLaunch) taskReady.Set();
+        if (!isAdministrator && !scheduledLaunch && !elevatedRestart && AdministratorTask.TryRun())
+        {
+            if (!fromAutostart) activationSignal.Set();
+            _singleInstance.ReleaseMutex();
+            if (taskReady.WaitOne(TimeSpan.FromSeconds(10)) || !TakeInstanceMutex(TimeSpan.Zero))
+            {
+                // Keep the activation events available until the elevated instance has opened them.
+                GC.KeepAlive(showSignal);
+                GC.KeepAlive(menuSignal);
+                GC.KeepAlive(settingsSignal);
+                Exit();
+                return;
+            }
+
+            scheduledLaunchFailed = true;
+            if (!fromAutostart) activationSignal.Reset();
+        }
+
+        _settings = SettingsStore.Load();
         // Tray app: hiding the flyout must not end the process.
         DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown;
 
         // Core Audio session notifications want an MTA thread; the objects themselves are free-threaded.
         _audio = await Task.Run(() => new AudioService());
 
-        _settings = SettingsStore.Load();
         VolumeCurve.Logarithmic = _settings.LogarithmicVolume;
         InstallLayout.RenameLegacyLauncher(); // before autostart: it points at the launcher
         AutoStart.Migrate();
@@ -95,7 +152,9 @@ public partial class App : Application
             SettingsStore.Save(_settings);
         }));
         ApplyMixerLayout();
-        _tray = new TrayIconHost(() => _flyout.Toggle(), ShowSettings, Shutdown);
+        _tray = new TrayIconHost(() => _flyout.Toggle(), ShowSettings, Shutdown,
+            isAdministrator ? null : RestartAsAdministrator);
+        if (scheduledLaunchFailed) _tray.Notify("omnideck.", "The administrator task did not start. Omnideck is running with regular permissions.");
 
         _nowPlaying = new NowPlayingWatcher(media);
         _nowPlaying.Filter = _settings.TaskbarWidget.ToFilter();
@@ -133,11 +192,10 @@ public partial class App : Application
         }) { IsBackground = true, Name = "Omnideck instance signals" }.Start();
 
         bool updated = cmdArgs.Contains(Updater.UpdatedArgument);
-        bool fromAutostart = cmdArgs.Contains(AutoStart.LaunchArgument) || updated;
         if (updated) _tray.Notify("omnideck. updated", $"Version {Updater.CurrentText} is installed.");
         if (updated) _ = Task.Run(InstallLayout.RemoveFlatLeftovers); // first start after leaving the flat layout
         StartUpdateChecks(dispatcher);
-        if (!fromAutostart) _flyout.Show(); // Manual launch: show that we're alive.
+        if (!fromAutostart && !scheduledLaunch) _flyout.Show(); // Manual launch: show that we're alive.
         else _flyout.Prewarm(); // tray-only start: warm the window up so the first open is clean
     }
 
@@ -347,6 +405,72 @@ public partial class App : Application
 
     /// <summary>The update is unpacked and its script waits for us: quit so it can replace the files.</summary>
     public void ExitForUpdate() => Shutdown();
+
+    private bool TakeInstanceMutex(TimeSpan timeout)
+    {
+        try { return _singleInstance!.WaitOne(timeout); }
+        catch (AbandonedMutexException) { return true; }
+    }
+
+    public async Task<bool> ConfigureAdministratorTaskAsync(bool enabled)
+    {
+        try
+        {
+            using var identity = WindowsIdentity.GetCurrent();
+            var info = new ProcessStartInfo(Environment.ProcessPath!)
+            {
+                UseShellExecute = true,
+                Verb = new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator) ? "open" : "runas",
+                WorkingDirectory = AppContext.BaseDirectory,
+                ArgumentList = { AdministratorTask.ConfigureArgument, enabled.ToString(), identity.User!.Value },
+            };
+            using var process = Process.Start(info);
+            if (process == null) return false;
+            await process.WaitForExitAsync();
+            return process.ExitCode == 0;
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223) { return false; }
+        catch (Win32Exception ex)
+        {
+            CrashLog.Write("configure administrator task", ex);
+            return false;
+        }
+    }
+
+    private void RestartAsAdministrator()
+    {
+        if (TryLaunchAsAdministrator([AutoStart.LaunchArgument], out bool failed)) Shutdown();
+        else if (failed) _tray?.Notify("omnideck.", "Could not restart as administrator.");
+    }
+
+    private static bool TryLaunchAsAdministrator(IEnumerable<string> arguments, out bool failed)
+    {
+        failed = false;
+        var startInfo = new ProcessStartInfo(Environment.ProcessPath!)
+        {
+            UseShellExecute = true,
+            Verb = "runas",
+            WorkingDirectory = AppContext.BaseDirectory,
+            ArgumentList = { ElevatedRestartArgument },
+        };
+        foreach (string argument in arguments) startInfo.ArgumentList.Add(argument);
+
+        try
+        {
+            using var elevated = Process.Start(startInfo);
+            return elevated != null;
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223) // ERROR_CANCELLED (UAC declined)
+        {
+            return false;
+        }
+        catch (Win32Exception ex)
+        {
+            CrashLog.Write("elevated restart", ex);
+            failed = true;
+            return false;
+        }
+    }
 
     private void Shutdown()
     {

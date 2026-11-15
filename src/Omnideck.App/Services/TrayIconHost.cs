@@ -16,7 +16,7 @@ public sealed class TrayIconHost : IDisposable
     private System.Drawing.Icon? _currentIcon;
     private bool? _lightTaskbar;
 
-    public TrayIconHost(Action toggleFlyout, Action openSettings, Action exit)
+    public TrayIconHost(Action toggleFlyout, Action openSettings, Action exit, Action? restartAsAdministrator)
     {
         _dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
@@ -27,6 +27,8 @@ public sealed class TrayIconHost : IDisposable
         menu.Items.Add(new MenuFlyoutItem { Text = "Open mixer", Icon = Glyph("\uE995"), Command = new RelayCommand(toggleFlyout) });
         menu.Items.Add(new MenuFlyoutItem { Text = "Settings", Icon = Glyph("\uE713"), Command = new RelayCommand(openSettings) });
         menu.Items.Add(new MenuFlyoutSeparator());
+        if (restartAsAdministrator != null)
+            menu.Items.Add(new MenuFlyoutItem { Text = "Restart as administrator", Icon = Glyph("\uEA18"), Command = new RelayCommand(restartAsAdministrator) });
         menu.Items.Add(new MenuFlyoutItem { Text = "Exit", Icon = Glyph("\uE7E8"), Command = new RelayCommand(exit) });
 
         _menuWindow = new Views.TrayMenuWindow(menu);

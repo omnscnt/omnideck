@@ -43,6 +43,18 @@ public sealed partial class SettingsWindow : Window
         Nav.SelectedItem = HotkeysItem;
         Nav.Loaded += (_, _) => FloatPane();
         AutoStartSwitch.IsOn = AutoStart.IsEnabled;
+        bool canConfigureAdministratorTask = AdministratorTask.IsInProgramFiles;
+        RunAsAdministratorSwitch.IsEnabled = canConfigureAdministratorTask;
+        if (canConfigureAdministratorTask)
+        {
+            RunAsAdministratorSwitch.IsOn = AdministratorTask.IsEnabled;
+            RunAsAdministratorSwitch.Toggled += OnRunAsAdministratorToggled;
+        }
+        else
+        {
+            string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            AdministratorTaskStatus.Text = $"Available when Omnideck is installed under {Path.TrimEndingDirectorySeparator(programFiles)}\\.";
+        }
         LogVolumeSwitch.IsOn = App.Instance.LogarithmicVolume;
         LoadMixerSettings();
         LoadDeviceSettings();
@@ -758,6 +770,29 @@ public sealed partial class SettingsWindow : Window
     private void OnAutoStartToggled(object sender, RoutedEventArgs e)
     {
         if (AutoStartSwitch.IsOn != AutoStart.IsEnabled) AutoStart.SetEnabled(AutoStartSwitch.IsOn);
+    }
+
+    private async void OnRunAsAdministratorToggled(object sender, RoutedEventArgs e)
+    {
+        bool enabled = RunAsAdministratorSwitch.IsOn;
+        RunAsAdministratorSwitch.IsEnabled = false;
+        try
+        {
+            if (await App.Instance.ConfigureAdministratorTaskAsync(enabled))
+            {
+                AdministratorTaskStatus.Text = "Applies the next time Omnideck starts.";
+                return;
+            }
+
+            AdministratorTaskStatus.Text = "Could not change the setting. Approve the Windows prompt and check the installation folder's permissions.";
+            RunAsAdministratorSwitch.Toggled -= OnRunAsAdministratorToggled;
+            RunAsAdministratorSwitch.IsOn = !enabled;
+            RunAsAdministratorSwitch.Toggled += OnRunAsAdministratorToggled;
+        }
+        finally
+        {
+            RunAsAdministratorSwitch.IsEnabled = true;
+        }
     }
 
     private void OnLogVolumeToggled(object sender, RoutedEventArgs e)

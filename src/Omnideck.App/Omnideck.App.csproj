@@ -8,9 +8,10 @@
     <AssemblyName>omnideck</AssemblyName>
     <AssemblyTitle>omnideck.</AssemblyTitle>
     <Product>omnideck.</Product>
-    <Version>0.6.1</Version>
+    <Version>0.6.2</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\omnideck.ico</ApplicationIcon>
+    <StartupHookSupport>false</StartupHookSupport>
     <Platforms>x64;ARM64</Platforms>
     <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</Platform>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>

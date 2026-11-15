@@ -1209,7 +1209,7 @@
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         Style="{StaticResource CaptionTextBlockStyle}"
                                         TextWrapping="Wrap"
-                                        Text="Starts quietly in the notification area when you sign in." />
+                                        Text="Starts in the notification area when you sign in." />
                                 </StackPanel>
                                 <ToggleSwitch
                                     x:Name="AutoStartSwitch"
@@ -1217,6 +1217,29 @@
                                     Grid.Column="1" HorizontalAlignment="Right"
                                     AutomationProperties.Name="Start with Windows"
                                     Toggled="OnAutoStartToggled" />
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Always run as administrator" />
+                                    <TextBlock
+                                        x:Name="AdministratorTaskStatus"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        TextWrapping="Wrap"
+                                        Text="Approve once to start with administrator rights on future launches, including sign-in." />
+                                </StackPanel>
+                                <ToggleSwitch
+                                    x:Name="RunAsAdministratorSwitch"
+                                    MinWidth="0"
+                                    Grid.Column="1" HorizontalAlignment="Right"
+                                    AutomationProperties.Name="Always run as administrator" />
                             </Grid>
                         </Border>
 
