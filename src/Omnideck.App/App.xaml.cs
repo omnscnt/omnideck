@@ -143,7 +143,8 @@ public partial class App : Application
         DispatcherShutdownMode = DispatcherShutdownMode.OnExplicitShutdown;
 
         // Core Audio session notifications want an MTA thread; the objects themselves are free-threaded.
-        _audio = await Task.Run(() => new AudioService());
+        var appVolumePath = Path.Combine(Path.GetDirectoryName(SettingsStore.FilePath)!, "app-volumes.json");
+        _audio = await Task.Run(() => new AudioService(appVolumePath));
 
         VolumeCurve.Logarithmic = _settings.LogarithmicVolume;
         InstallLayout.RenameLegacyLauncher(); // before autostart: it points at the launcher

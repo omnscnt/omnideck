@@ -13,6 +13,7 @@ public sealed class AudioService : IDisposable
     private readonly object _gate = new();
     private readonly IMMDeviceEnumerator _enumerator;
     private readonly DeviceNotifications _deviceNotifications;
+    private readonly AppVolumeStore? _appVolumes;
     private readonly Dictionary<string, AudioApp> _apps = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<AudioSession, AudioApp> _sessionOwners = [];
     private readonly Timer _reaper;
@@ -32,8 +33,11 @@ public sealed class AudioService : IDisposable
     public event EventHandler<AudioApp>? AppAdded;
     public event EventHandler<AudioApp>? AppRemoved;
 
-    public AudioService()
+    public AudioService() : this(null) { }
+
+    public AudioService(string? appVolumePath)
     {
+        if (appVolumePath != null) _appVolumes = new AppVolumeStore(Path.GetFullPath(appVolumePath));
         _enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
         _deviceNotifications = new DeviceNotifications(this);
         _enumerator.RegisterEndpointNotificationCallback(_deviceNotifications);
@@ -359,15 +363,16 @@ public sealed class AudioService : IDisposable
                     : !string.IsNullOrWhiteSpace(session.SessionDisplayName) && !session.SessionDisplayName.StartsWith('@')
                         ? session.SessionDisplayName
                         : ProcessInfo.GetFriendlyName(exePath, session.ProcessId);
-                app = new AudioApp(key, name, exePath, session.IconPath, session.IsSystemSounds);
+                var volumes = exePath != null || session.IsSystemSounds ? _appVolumes : null;
+                app = new AudioApp(key, name, exePath, session.IconPath, session.IsSystemSounds, volumes);
                 _apps[key] = app;
                 created = true;
             }
+            app.Add(session);
+            session.Ended += (_, _) => ThreadPool.QueueUserWorkItem(_ => RemoveSession(session));
             _sessionOwners[session] = app;
         }
 
-        app.Add(session);
-        session.Ended += (_, _) => ThreadPool.QueueUserWorkItem(_ => RemoveSession(session));
         if (created && raiseEvent) AppAdded?.Invoke(this, app);
     }
 

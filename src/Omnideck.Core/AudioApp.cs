@@ -9,6 +9,7 @@ public sealed class AudioApp : IVolumeControl
 {
     private readonly object _gate = new();
     private readonly List<AudioSession> _sessions = [];
+    private readonly AppVolumeStore? _volumes;
 
     public string Key { get; }
     public string DisplayName { get; }
@@ -22,13 +23,15 @@ public sealed class AudioApp : IVolumeControl
     /// <summary>Raised when the volume or mute state changes, from anywhere (this app, the OS mixer, the app itself).</summary>
     public event EventHandler<VolumeChangedEventArgs>? VolumeChanged;
 
-    internal AudioApp(string key, string displayName, string? executablePath, string? iconPath, bool isSystemSounds)
+    internal AudioApp(string key, string displayName, string? executablePath, string? iconPath, bool isSystemSounds,
+        AppVolumeStore? volumes)
     {
         Key = key;
         DisplayName = displayName;
         ExecutablePath = executablePath;
         IconPath = iconPath;
         IsSystemSounds = isSystemSounds;
+        _volumes = volumes;
         ProcessName = executablePath is null ? "" : Path.GetFileNameWithoutExtension(executablePath).ToLowerInvariant();
     }
 
@@ -55,7 +58,14 @@ public sealed class AudioApp : IVolumeControl
 
     public void SetVolume(float volume, Guid context = default)
     {
-        foreach (var session in Snapshot()) Try(() => session.SetVolume(volume, context));
+        if (float.IsNaN(volume)) return;
+        volume = Math.Clamp(volume, 0f, 1f);
+        lock (_gate)
+        {
+            if (_sessions.Count == 0) return;
+            foreach (var session in _sessions) Try(() => session.SetVolume(volume, context));
+            _volumes?.Save(Key, volume);
+        }
     }
 
     /// <summary>Steps by <paramref name="delta"/> of the slider (see <see cref="VolumeCurve"/>), as the mixer shows it.</summary>
@@ -81,23 +91,26 @@ public sealed class AudioApp : IVolumeControl
 
     internal void Add(AudioSession session)
     {
-        session.VolumeChanged += OnSessionVolumeChanged;
-        float? sync = null;
-        bool mute = false;
         lock (_gate)
         {
-            // Keep the group consistent: a new stream of an app we already show adopts its current level.
-            if (_sessions.Count > 0)
+            if (_sessions.Count == 0)
             {
-                sync = _sessions[0].Volume;
-                mute = _sessions[0].IsMuted;
+                if (_volumes?.Get(Key) is float saved && session.Volume != saved)
+                    Try(() => session.SetVolume(saved, Guid.Empty));
             }
+            else
+            {
+                // A new stream of an app we already show adopts its current level.
+                var first = _sessions[0];
+                var level = first.Volume;
+                if (Math.Abs(session.Volume - level) > 0.001f)
+                {
+                    Try(() => session.SetVolume(level, Guid.Empty));
+                    Try(() => session.SetMute(first.IsMuted, Guid.Empty));
+                }
+            }
+            session.VolumeChanged += OnSessionVolumeChanged;
             _sessions.Add(session);
-        }
-        if (sync is float level && Math.Abs(session.Volume - level) > 0.001f)
-        {
-            Try(() => session.SetVolume(level, Guid.Empty));
-            Try(() => session.SetMute(mute, Guid.Empty));
         }
     }
 
